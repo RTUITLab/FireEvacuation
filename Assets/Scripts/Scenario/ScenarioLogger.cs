@@ -25,6 +25,19 @@ public class ScenarioLogger : MonoBehaviour
 
     public string LastSavedLogPath => lastSavedLogPath;
 
+    // Если объект выгружается вместе со сценой во время Play Mode,
+    // сохраняем промежуточный лог как аварийное завершение сценария.
+    private void OnDisable()
+    {
+        FlushRunIfNeeded("manual_stop");
+    }
+
+    // При закрытии приложения также сохраняем всё, что уже успело произойти.
+    private void OnApplicationQuit()
+    {
+        FlushRunIfNeeded("manual_stop");
+    }
+
     // Запускает новый прогон и сбрасывает накопленные значения.
     public void StartRun()
     {
@@ -234,5 +247,15 @@ public class ScenarioLogger : MonoBehaviour
         }
 
         return new string(sanitizedCharacters);
+    }
+
+    private void FlushRunIfNeeded(string completionStatus)
+    {
+        if (!Application.isPlaying || !runStarted)
+        {
+            return;
+        }
+
+        FinishRun(completionStatus);
     }
 }
