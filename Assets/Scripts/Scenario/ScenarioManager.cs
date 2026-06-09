@@ -5,11 +5,14 @@ using UnityEngine;
 public class ScenarioManager : MonoBehaviour
 {
     [SerializeField] private List<VictimNPC> activeVictims = new List<VictimNPC>();
+    [SerializeField] private ScenarioLogger scenarioLogger;
     [SerializeField] private int totalNpcCount;
     [SerializeField] private int rescuedNpcCount;
 
     private readonly HashSet<VictimNPC> registeredVictims = new HashSet<VictimNPC>();
     private readonly HashSet<VictimNPC> rescuedVictims = new HashSet<VictimNPC>();
+    private bool runStarted;
+    private bool runFinished;
 
     public IReadOnlyList<VictimNPC> ActiveVictims => activeVictims;
     public int TotalNpcCount => totalNpcCount;
@@ -20,6 +23,21 @@ public class ScenarioManager : MonoBehaviour
         RebuildRegistriesFromSerializedList();
         RegisterSceneVictims();
         RefreshCounters();
+    }
+
+    private void Start()
+    {
+        ResolveScenarioLogger();
+        if (scenarioLogger == null)
+        {
+            return;
+        }
+
+        scenarioLogger.StartRun();
+        runStarted = true;
+        runFinished = false;
+        SyncLoggerState();
+        TryFinishScenario();
     }
 
     private void OnValidate()
@@ -52,6 +70,14 @@ public class ScenarioManager : MonoBehaviour
         }
 
         RefreshCounters();
+        if (runStarted && scenarioLogger != null && wasRegistered)
+        {
+            scenarioLogger.RegisterNpc(victim);
+            if (victim.IsRescued)
+            {
+                scenarioLogger.MarkNpcRescued(victim);
+            }
+        }
 
         if (wasRegistered)
         {
@@ -74,7 +100,34 @@ public class ScenarioManager : MonoBehaviour
         }
 
         RefreshCounters();
+        if (runStarted && scenarioLogger != null)
+        {
+            scenarioLogger.MarkNpcRescued(victim);
+        }
+
         Debug.Log($"ScenarioManager rescued progress: {rescuedNpcCount}/{totalNpcCount} after '{victim.NpcId}'.", this);
+        TryFinishScenario();
+    }
+
+    public void NotifyVictimLost(VictimNPC victim)
+    {
+        if (!runStarted || scenarioLogger == null || victim == null)
+        {
+            return;
+        }
+
+        scenarioLogger.MarkNpcLost(victim);
+    }
+
+    public void FinishScenario(string completionStatus)
+    {
+        if (!runStarted || runFinished || scenarioLogger == null)
+        {
+            return;
+        }
+
+        scenarioLogger.FinishRun(completionStatus);
+        runFinished = true;
     }
 
     private void RegisterSceneVictims()
@@ -117,5 +170,41 @@ public class ScenarioManager : MonoBehaviour
     {
         totalNpcCount = registeredVictims.Count;
         rescuedNpcCount = rescuedVictims.Count;
+    }
+
+    private void ResolveScenarioLogger()
+    {
+        if (scenarioLogger == null)
+        {
+            scenarioLogger = FindAnyObjectByType<ScenarioLogger>(FindObjectsInactive.Include);
+        }
+    }
+
+    private void SyncLoggerState()
+    {
+        if (scenarioLogger == null)
+        {
+            return;
+        }
+
+        foreach (var victim in registeredVictims)
+        {
+            scenarioLogger.RegisterNpc(victim);
+        }
+
+        foreach (var victim in rescuedVictims)
+        {
+            scenarioLogger.MarkNpcRescued(victim);
+        }
+    }
+
+    private void TryFinishScenario()
+    {
+        if (runFinished || !runStarted || totalNpcCount <= 0 || rescuedNpcCount < totalNpcCount)
+        {
+            return;
+        }
+
+        FinishScenario("all_rescued");
     }
 }
