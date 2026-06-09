@@ -7,20 +7,24 @@ using UnityEngine;
 public class EvacuationZone : MonoBehaviour
 {
     [SerializeField] private string zoneId = "ExitZone";
-    [SerializeField] private Color gizmoColor = new(0.2f, 0.9f, 0.3f, 0.2f);
+    [SerializeField] private Color gizmoColor = new Color(0.2f, 0.9f, 0.3f, 0.2f);
 
-    private readonly HashSet<int> rescuedVictimIds = new();
+    private readonly HashSet<string> rescuedVictimIds = new HashSet<string>();
     private Collider triggerCollider;
+
+    private void Reset()
+    {
+        EnsureTriggerCollider();
+    }
 
     private void Awake()
     {
-        triggerCollider = GetComponent<Collider>();
+        EnsureTriggerCollider();
+    }
 
-        if (triggerCollider != null && !triggerCollider.isTrigger)
-        {
-            Debug.LogWarning($"EvacuationZone '{name}' requires Collider.isTrigger enabled. Enabling automatically.", this);
-            triggerCollider.isTrigger = true;
-        }
+    private void OnValidate()
+    {
+        EnsureTriggerCollider();
     }
 
     private void OnTriggerEnter(Collider other)
@@ -30,76 +34,58 @@ public class EvacuationZone : MonoBehaviour
             return;
         }
 
-        var victim = FindVictimComponent(other);
+        var victim = other.GetComponentInParent<VictimNPC>();
         if (victim == null)
         {
             return;
         }
 
-        var victimId = victim.gameObject.GetInstanceID();
-        if (!rescuedVictimIds.Add(victimId))
+        var victimKey = string.IsNullOrWhiteSpace(victim.NpcId)
+            ? victim.gameObject.name
+            : victim.NpcId;
+
+        if (!rescuedVictimIds.Add(victimKey))
         {
             return;
         }
 
-        InvokeMarkRescued(victim);
+        if (!victim.MarkRescued())
+        {
+            return;
+        }
+
+        Debug.Log($"EvacuationZone '{zoneId}' rescued '{victimKey}'.", this);
         NotifyScenarioManager(victim);
     }
 
-    private Component FindVictimComponent(Collider other)
+    private void EnsureTriggerCollider()
     {
-        var victim = other.GetComponent("VictimNPC");
-        if (victim != null)
+        triggerCollider = GetComponent<Collider>();
+        if (triggerCollider != null && !triggerCollider.isTrigger)
         {
-            return victim;
+            Debug.LogWarning($"EvacuationZone '{name}' requires Collider.isTrigger enabled. Enabling automatically.", this);
+            triggerCollider.isTrigger = true;
         }
-
-        var current = other.transform.parent;
-        while (current != null)
-        {
-            victim = current.GetComponent("VictimNPC");
-            if (victim != null)
-            {
-                return victim;
-            }
-
-            current = current.parent;
-        }
-
-        return null;
     }
 
-    private void InvokeMarkRescued(Component victim)
-    {
-        var method = victim.GetType().GetMethod("MarkRescued", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        if (method == null)
-        {
-            Debug.LogWarning($"EvacuationZone '{zoneId}' found VictimNPC on '{victim.name}', but MarkRescued() is missing.", victim);
-            return;
-        }
-
-        method.Invoke(victim, null);
-    }
-
-    private void NotifyScenarioManager(Component victim)
+    private void NotifyScenarioManager(VictimNPC victim)
     {
         var manager = FindScenarioManager();
         if (manager == null)
         {
+            // TODO: Replace scene-wide ScenarioManager lookup with a direct serialized reference once the manager exists.
             return;
         }
 
-        var scenarioManagerType = manager.GetType();
-
-        var method = scenarioManagerType.GetMethod("OnVictimRescued", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            ?? scenarioManagerType.GetMethod("RegisterRescuedVictim", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        var managerType = manager.GetType();
+        var method = managerType.GetMethod("OnVictimRescued", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            ?? managerType.GetMethod("RegisterRescuedVictim", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
         if (method == null)
         {
             return;
         }
 
-        // TODO: Replace reflective notification with a direct ScenarioManager reference when the manager API is defined.
         var parameters = method.GetParameters();
         if (parameters.Length == 1 && parameters[0].ParameterType.IsInstanceOfType(victim))
         {
@@ -117,16 +103,16 @@ public class EvacuationZone : MonoBehaviour
 
     private MonoBehaviour FindScenarioManager()
     {
-        var behaviours = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
-        foreach (var behaviour in behaviours)
+        var behaviours = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include);
+        for (var index = 0; index < behaviours.Length; index++)
         {
+            var behaviour = behaviours[index];
             if (behaviour != null && behaviour.GetType().Name == "ScenarioManager")
             {
                 return behaviour;
             }
         }
 
-        // TODO: Replace scene-wide lookup with a direct serialized reference when ScenarioManager is implemented.
         return null;
     }
 
@@ -141,18 +127,19 @@ public class EvacuationZone : MonoBehaviour
         Gizmos.color = gizmoColor;
         Gizmos.matrix = transform.localToWorldMatrix;
 
-        switch (zoneCollider)
+        if (zoneCollider is BoxCollider boxCollider)
         {
-            case BoxCollider boxCollider:
-                Gizmos.DrawCube(boxCollider.center, boxCollider.size);
-                Gizmos.color = new Color(gizmoColor.r, gizmoColor.g, gizmoColor.b, 1f);
-                Gizmos.DrawWireCube(boxCollider.center, boxCollider.size);
-                break;
-            case SphereCollider sphereCollider:
-                Gizmos.DrawSphere(sphereCollider.center, sphereCollider.radius);
-                Gizmos.color = new Color(gizmoColor.r, gizmoColor.g, gizmoColor.b, 1f);
-                Gizmos.DrawWireSphere(sphereCollider.center, sphereCollider.radius);
-                break;
+            Gizmos.DrawCube(boxCollider.center, boxCollider.size);
+            Gizmos.color = new Color(gizmoColor.r, gizmoColor.g, gizmoColor.b, 1f);
+            Gizmos.DrawWireCube(boxCollider.center, boxCollider.size);
+            return;
+        }
+
+        if (zoneCollider is SphereCollider sphereCollider)
+        {
+            Gizmos.DrawSphere(sphereCollider.center, sphereCollider.radius);
+            Gizmos.color = new Color(gizmoColor.r, gizmoColor.g, gizmoColor.b, 1f);
+            Gizmos.DrawWireSphere(sphereCollider.center, sphereCollider.radius);
         }
     }
 }
