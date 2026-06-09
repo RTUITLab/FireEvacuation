@@ -41,6 +41,11 @@ public class VictimNPC : MonoBehaviour
         }
     }
 
+    private void OnEnable()
+    {
+        RegisterWithScenarioManager();
+    }
+
     private void OnValidate()
     {
         condition = Mathf.Max(0f, condition);
@@ -81,6 +86,17 @@ public class VictimNPC : MonoBehaviour
         }
 
         npcId = $"{gameObject.name}_{Guid.NewGuid():N}";
+    }
+
+    private void RegisterWithScenarioManager()
+    {
+        var scenarioManager = ScenarioManager.FindInScene();
+        if (scenarioManager == null)
+        {
+            return;
+        }
+
+        scenarioManager.RegisterVictim(this);
     }
 
     private void DisableActiveBehaviour()

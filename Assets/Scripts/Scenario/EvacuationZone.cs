@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Reflection;
 using UnityEngine;
 
 [DisallowMultipleComponent]
@@ -7,6 +6,7 @@ using UnityEngine;
 public class EvacuationZone : MonoBehaviour
 {
     [SerializeField] private string zoneId = "ExitZone";
+    [SerializeField] private ScenarioManager scenarioManager;
     [SerializeField] private Color gizmoColor = new Color(0.2f, 0.9f, 0.3f, 0.2f);
 
     private readonly HashSet<string> rescuedVictimIds = new HashSet<string>();
@@ -20,11 +20,13 @@ public class EvacuationZone : MonoBehaviour
     private void Awake()
     {
         EnsureTriggerCollider();
+        ResolveScenarioManager();
     }
 
     private void OnValidate()
     {
         EnsureTriggerCollider();
+        ResolveScenarioManager();
     }
 
     private void OnTriggerEnter(Collider other)
@@ -70,50 +72,23 @@ public class EvacuationZone : MonoBehaviour
 
     private void NotifyScenarioManager(VictimNPC victim)
     {
-        var manager = FindScenarioManager();
+        var manager = ResolveScenarioManager();
         if (manager == null)
         {
-            // TODO: Replace scene-wide ScenarioManager lookup with a direct serialized reference once the manager exists.
             return;
         }
 
-        var managerType = manager.GetType();
-        var method = managerType.GetMethod("OnVictimRescued", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            ?? managerType.GetMethod("RegisterRescuedVictim", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-
-        if (method == null)
-        {
-            return;
-        }
-
-        var parameters = method.GetParameters();
-        if (parameters.Length == 1 && parameters[0].ParameterType.IsInstanceOfType(victim))
-        {
-            method.Invoke(manager, new object[] { victim });
-            return;
-        }
-
-        if (parameters.Length == 2 &&
-            parameters[0].ParameterType == typeof(string) &&
-            parameters[1].ParameterType.IsInstanceOfType(victim))
-        {
-            method.Invoke(manager, new object[] { zoneId, victim });
-        }
+        manager.NotifyVictimRescued(victim);
     }
 
-    private MonoBehaviour FindScenarioManager()
+    private ScenarioManager ResolveScenarioManager()
     {
-        var behaviours = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include);
-        for (var index = 0; index < behaviours.Length; index++)
+        if (scenarioManager == null)
         {
-            var behaviour = behaviours[index];
-            if (behaviour != null && behaviour.GetType().Name == "ScenarioManager")
-            {
-                return behaviour;
-            }
+            scenarioManager = ScenarioManager.FindInScene();
         }
 
-        return null;
+        return scenarioManager;
     }
 
     private void OnDrawGizmos()
