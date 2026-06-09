@@ -9,7 +9,7 @@ public class EvacuationZone : MonoBehaviour
     [SerializeField] private ScenarioManager scenarioManager;
     [SerializeField] private Color gizmoColor = new Color(0.2f, 0.9f, 0.3f, 0.2f);
 
-    private readonly HashSet<string> rescuedVictimIds = new HashSet<string>();
+    private readonly HashSet<VictimNPC> rescuedVictims = new HashSet<VictimNPC>();
     private Collider triggerCollider;
 
     private void Reset()
@@ -42,19 +42,20 @@ public class EvacuationZone : MonoBehaviour
             return;
         }
 
-        var victimKey = string.IsNullOrWhiteSpace(victim.NpcId)
-            ? victim.gameObject.name
-            : victim.NpcId;
-
-        if (!rescuedVictimIds.Add(victimKey))
+        if (!rescuedVictims.Add(victim))
         {
             return;
         }
 
         if (!victim.MarkRescued())
         {
+            rescuedVictims.Remove(victim);
             return;
         }
+
+        var victimKey = string.IsNullOrWhiteSpace(victim.NpcId)
+            ? victim.gameObject.name
+            : victim.NpcId;
 
         Debug.Log($"EvacuationZone '{zoneId}' rescued '{victimKey}'.", this);
         NotifyScenarioManager(victim);

@@ -31,6 +31,7 @@ public class VictimNPC : MonoBehaviour
     private void Awake()
     {
         EnsureNpcId();
+        EnsureUniqueNpcId();
         condition = Mathf.Max(0f, condition);
         cachedRenderers = GetComponentsInChildren<Renderer>(true);
         currentState = isRescued ? VictimState.Rescued : initialState;
@@ -50,6 +51,7 @@ public class VictimNPC : MonoBehaviour
     {
         condition = Mathf.Max(0f, condition);
         EnsureNpcId();
+        EnsureUniqueNpcId();
     }
 
     public void SetState(VictimState newState)
@@ -86,6 +88,32 @@ public class VictimNPC : MonoBehaviour
         }
 
         npcId = $"{gameObject.name}_{Guid.NewGuid():N}";
+    }
+
+    private void EnsureUniqueNpcId()
+    {
+        if (!gameObject.scene.IsValid() || string.IsNullOrWhiteSpace(npcId))
+        {
+            return;
+        }
+
+        var victims = FindObjectsByType<VictimNPC>(FindObjectsInactive.Include);
+        for (var index = 0; index < victims.Length; index++)
+        {
+            var otherVictim = victims[index];
+            if (otherVictim == null || otherVictim == this)
+            {
+                continue;
+            }
+
+            if (!string.Equals(otherVictim.npcId, npcId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            npcId = $"{gameObject.name}_{Guid.NewGuid():N}";
+            return;
+        }
     }
 
     private void RegisterWithScenarioManager()
