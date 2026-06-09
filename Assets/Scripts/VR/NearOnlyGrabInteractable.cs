@@ -5,7 +5,7 @@ using UnityEngine.XR.Interaction.Toolkit.Interactors;
 [DisallowMultipleComponent]
 public class NearOnlyGrabInteractable : XRGrabInteractable
 {
-    [SerializeField] private float maxSelectDistance = 0.85f;
+    [SerializeField] private float maxSelectDistance = 0.03f;
 
     public override bool IsHoverableBy(IXRHoverInteractor interactor)
     {
