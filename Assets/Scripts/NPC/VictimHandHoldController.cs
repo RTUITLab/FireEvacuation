@@ -193,7 +193,7 @@ public class VictimHandHoldController : MonoBehaviour
         victimNpc.SetState(VictimNPC.VictimState.Dragged);
         ApplyPlayerSpeedModifier();
         UpdateFeedbackColor();
-        Debug.Log($"Victim hold started for '{victimNpc.NpcId}'.", this);
+        
     }
 
     private void OnSelectExited(SelectExitEventArgs args)
@@ -221,7 +221,7 @@ public class VictimHandHoldController : MonoBehaviour
         }
 
         UpdateFeedbackColor();
-        Debug.Log($"Victim hold ended for '{victimNpc.NpcId}'.", this);
+      //  Debug.Log($"Victim hold ended for '{victimNpc.NpcId}'.", this);
     }
 
     private void NormalizeSettings()
@@ -252,7 +252,7 @@ public class VictimHandHoldController : MonoBehaviour
         {
             if (!hasWarnedMissingPlayerSpeedModifier)
             {
-                Debug.LogWarning("VictimHandHoldController could not find PlayerSpeedModifier or XR movement provider. Assign PlayerSpeedModifier manually if slowdown is required.", this);
+             //   Debug.LogWarning("VictimHandHoldController could not find PlayerSpeedModifier or XR movement provider. Assign PlayerSpeedModifier manually if slowdown is required.", this);
                 hasWarnedMissingPlayerSpeedModifier = true;
             }
 
