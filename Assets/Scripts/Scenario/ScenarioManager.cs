@@ -141,6 +141,7 @@ public class ScenarioManager : MonoBehaviour
 
         scenarioLogger.FinishRun(completionStatus);
         runFinished = true;
+        Debug.Log($"ScenarioManager finished scenario with status '{completionStatus}'.", this);
     }
 
     private void RegisterSceneVictims()
