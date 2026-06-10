@@ -16,7 +16,8 @@ public class VictimNPC : MonoBehaviour
         Following = 1,
         Dragged = 2,
         Rescued = 3,
-        Critical = 4
+        Critical = 4,
+        Lost = 5
     }
 
     [SerializeField] private string npcId;
@@ -26,14 +27,17 @@ public class VictimNPC : MonoBehaviour
     [SerializeField] [Range(0f, 1f)] private float currentPanic;
     [SerializeField] private HazardZone currentHazardZone;
     [SerializeField] private bool isInLowMovement;
+    [SerializeField] [Range(0f, 1f)] private float weight = 0.5f;
     [SerializeField] [Range(0f, 1f)] private float criticalDamageThreshold = 0.75f;
     [SerializeField] private VictimState initialState = VictimState.Idle;
     [SerializeField] private Color rescuedColor = new Color(0.24f, 0.85f, 0.32f, 1f);
     [SerializeField] private Color criticalColor = new Color(0.82f, 0.16f, 0.16f, 1f);
+    [SerializeField] private Color lostColor = new Color(0.3f, 0.3f, 0.36f, 1f);
 
     private VictimState currentState;
     private Renderer[] cachedRenderers;
     private bool isCritical;
+    private bool isLost;
 
     public string NpcId => npcId;
     public bool IsRescued => isRescued;
@@ -42,7 +46,9 @@ public class VictimNPC : MonoBehaviour
     public float CurrentPanic => currentPanic;
     public HazardZone CurrentHazardZone => currentHazardZone;
     public bool IsInLowMovement => isInLowMovement;
+    public float Weight => weight;
     public bool IsCritical => isCritical;
+    public bool IsLost => isLost;
     public VictimState CurrentState => currentState;
 
     private void Awake()
@@ -52,14 +58,20 @@ public class VictimNPC : MonoBehaviour
         condition = Mathf.Clamp01(condition);
         currentDamage = Mathf.Clamp01(currentDamage);
         currentPanic = Mathf.Clamp01(currentPanic);
+        weight = Mathf.Clamp01(weight);
         criticalDamageThreshold = Mathf.Clamp01(criticalDamageThreshold);
         cachedRenderers = GetComponentsInChildren<Renderer>(true);
-        isCritical = !isRescued && currentDamage >= criticalDamageThreshold;
+        isLost = !isRescued && currentDamage >= 1f;
+        isCritical = !isRescued && !isLost && currentDamage >= criticalDamageThreshold;
         currentState = ResolveStateAfterStatusChange(initialState);
 
         if (isRescued)
         {
             ApplyColor(rescuedColor);
+        }
+        else if (isLost)
+        {
+            ApplyLostPresentation(false);
         }
         else if (isCritical)
         {
@@ -77,6 +89,7 @@ public class VictimNPC : MonoBehaviour
         condition = Mathf.Clamp01(condition);
         currentDamage = Mathf.Clamp01(currentDamage);
         currentPanic = Mathf.Clamp01(currentPanic);
+        weight = Mathf.Clamp01(weight);
         criticalDamageThreshold = Mathf.Clamp01(criticalDamageThreshold);
         EnsureNpcId();
         EnsureUniqueNpcId();
@@ -95,6 +108,12 @@ public class VictimNPC : MonoBehaviour
             return;
         }
 
+        if (isLost && newState != VictimState.Dragged && newState != VictimState.Rescued)
+        {
+            currentState = VictimState.Lost;
+            return;
+        }
+
         currentState = isRescued ? VictimState.Rescued : newState;
     }
 
@@ -107,6 +126,7 @@ public class VictimNPC : MonoBehaviour
 
         isRescued = true;
         isCritical = false;
+        isLost = false;
         currentState = VictimState.Rescued;
         DisableActiveBehaviour();
         ApplyColor(rescuedColor);
@@ -137,10 +157,41 @@ public class VictimNPC : MonoBehaviour
         currentPanic = Mathf.Clamp01(currentPanic + panicDelta);
         condition = Mathf.Clamp01(1f - currentDamage);
 
+        if (!isLost && currentDamage >= 1f)
+        {
+            MarkLost();
+            return;
+        }
+
         if (!isCritical && currentDamage >= criticalDamageThreshold)
         {
             EnterCriticalState();
         }
+    }
+
+    public bool MarkLost()
+    {
+        if (isRescued || isLost)
+        {
+            return false;
+        }
+
+        isLost = true;
+        isCritical = false;
+        currentDamage = 1f;
+        condition = 0f;
+        currentState = VictimState.Lost;
+        StopSelfMovement();
+        ApplyLostPresentation();
+
+        var scenarioManager = ScenarioManager.FindInScene();
+        if (scenarioManager != null)
+        {
+            scenarioManager.NotifyVictimLost(this);
+        }
+
+        Debug.Log($"VictimNPC '{npcId}' became lost.", this);
+        return true;
     }
 
     public void SetCurrentHazardZone(HazardZone zone)
@@ -164,6 +215,12 @@ public class VictimNPC : MonoBehaviour
         if (isCritical)
         {
             ApplyColor(criticalColor);
+            return;
+        }
+
+        if (isLost)
+        {
+            ApplyColor(lostColor);
         }
     }
 
@@ -239,9 +296,18 @@ public class VictimNPC : MonoBehaviour
         }
     }
 
+    private void StopSelfMovement()
+    {
+        if (TryGetComponent<NavMeshAgent>(out var navMeshAgent) && navMeshAgent.enabled)
+        {
+            navMeshAgent.isStopped = true;
+            navMeshAgent.ResetPath();
+        }
+    }
+
     private void EnterCriticalState(bool updateColor = true)
     {
-        if (isRescued)
+        if (isRescued || isLost)
         {
             return;
         }
@@ -252,11 +318,7 @@ public class VictimNPC : MonoBehaviour
             currentState = VictimState.Critical;
         }
 
-        if (TryGetComponent<NavMeshAgent>(out var navMeshAgent) && navMeshAgent.enabled)
-        {
-            navMeshAgent.isStopped = true;
-            navMeshAgent.ResetPath();
-        }
+        StopSelfMovement();
 
         if (updateColor)
         {
@@ -277,12 +339,28 @@ public class VictimNPC : MonoBehaviour
             return VictimState.Rescued;
         }
 
+        if (isLost)
+        {
+            return VictimState.Lost;
+        }
+
         if (isCritical)
         {
             return VictimState.Critical;
         }
 
         return fallbackState;
+    }
+
+    private void ApplyLostPresentation(bool updateColor = true)
+    {
+        var currentEulerAngles = transform.rotation.eulerAngles;
+        transform.rotation = Quaternion.Euler(90f, currentEulerAngles.y, 0f);
+
+        if (updateColor)
+        {
+            ApplyColor(lostColor);
+        }
     }
 
     private void ApplyColor(Color color)

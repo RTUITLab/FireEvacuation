@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit;
 using UnityEngine.XR.Interaction.Toolkit.Interactables;
@@ -13,6 +14,8 @@ public class VictimHandHoldController : MonoBehaviour
     private const float DefaultPlayerSpeedMultiplierWhileHolding = 0.65f;
     private const float DefaultMovementSpeedInfluence = 0.35f;
     private const float MinimumPlayerSpeedMultiplier = 0.35f;
+    private const int MinimumHandsForLostVictim = 2;
+    private const float LostVictimMinimumSpeedMultiplier = 0.35f;
 
     [SerializeField] private float leashSlackDistance = 0.35f;
     [SerializeField] private float maxHandHoldSpeed = 1.6f;
@@ -31,7 +34,7 @@ public class VictimHandHoldController : MonoBehaviour
     private Collider gripCollider;
     private XRGrabInteractable grabInteractable;
     private Renderer[] renderers;
-    private Transform activeHandTransform;
+    private readonly List<Transform> activeHandTransforms = new List<Transform>();
     private Vector3 localGripOffset;
     private Vector3 smoothingVelocity;
     private float lockedGroundY;
@@ -79,13 +82,24 @@ public class VictimHandHoldController : MonoBehaviour
 
     private void FixedUpdate()
     {
-        if (!isHeld || activeHandTransform == null || victimNpc.IsRescued)
+        if (!isHeld || victimNpc.IsRescued)
         {
             return;
         }
 
-        var handPosition = activeHandTransform.position;
-        var planarHandPosition = new Vector3(handPosition.x, lockedGroundY, handPosition.z);
+        if (!TryGetReferenceHandPosition(out var referenceHandPosition))
+        {
+            KeepBodyPose();
+            return;
+        }
+
+        if (victimNpc.IsLost && activeHandTransforms.Count < MinimumHandsForLostVictim)
+        {
+            KeepBodyPose();
+            return;
+        }
+
+        var planarHandPosition = new Vector3(referenceHandPosition.x, lockedGroundY, referenceHandPosition.z);
         var currentGripPoint = body.position + localGripOffset;
         currentGripPoint.y = lockedGroundY;
 
@@ -119,12 +133,12 @@ public class VictimHandHoldController : MonoBehaviour
             desiredPosition,
             ref smoothingVelocity,
             smoothingTime,
-            maxHandHoldSpeed,
+            GetCurrentMaxHandHoldSpeed(),
             Time.fixedDeltaTime);
 
         nextPosition.y = lockedGroundY;
         body.MovePosition(nextPosition);
-        KeepUpright();
+        KeepBodyPose();
     }
 
     public void ForceRelease()
@@ -176,6 +190,12 @@ public class VictimHandHoldController : MonoBehaviour
             return;
         }
 
+        if (!victimNpc.IsLost && activeHandTransforms.Count > 0)
+        {
+            ForceDeselect(args.interactorObject);
+            return;
+        }
+
         var gripStartPosition = gripCollider.ClosestPoint(attachTransform.position);
         if (Vector3.Distance(gripStartPosition, attachTransform.position) > maxGripDistance)
         {
@@ -183,22 +203,46 @@ public class VictimHandHoldController : MonoBehaviour
             return;
         }
 
-        activeHandTransform = attachTransform;
+        if (!activeHandTransforms.Contains(attachTransform))
+        {
+            activeHandTransforms.Add(attachTransform);
+        }
+
         lockedGroundY = body.position.y;
-        localGripOffset = transform.InverseTransformPoint(gripStartPosition);
-        localGripOffset.y = 0f;
+        RecalculateGripOffset();
         smoothingVelocity = Vector3.zero;
-        isHeld = true;
+        isHeld = activeHandTransforms.Count > 0;
 
         victimNpc.SetState(VictimNPC.VictimState.Dragged);
         ApplyPlayerSpeedModifier();
         UpdateFeedbackColor();
-        
     }
 
     private void OnSelectExited(SelectExitEventArgs args)
     {
-        EndHold(true);
+        var attachTransform = args.interactorObject.GetAttachTransform(grabInteractable);
+        if (attachTransform == null && args.interactorObject is Component interactorComponent)
+        {
+            attachTransform = interactorComponent.transform;
+        }
+
+        if (attachTransform != null)
+        {
+            activeHandTransforms.Remove(attachTransform);
+        }
+
+        if (activeHandTransforms.Count == 0)
+        {
+            EndHold(true);
+            return;
+        }
+
+        isHeld = true;
+        lockedGroundY = body.position.y;
+        RecalculateGripOffset();
+        smoothingVelocity = Vector3.zero;
+        ApplyPlayerSpeedModifier();
+        UpdateFeedbackColor();
     }
 
     private void EndHold(bool restoreIdleState)
@@ -212,12 +256,12 @@ public class VictimHandHoldController : MonoBehaviour
         }
 
         isHeld = false;
-        activeHandTransform = null;
+        activeHandTransforms.Clear();
         smoothingVelocity = Vector3.zero;
 
         if (restoreIdleState && !victimNpc.IsRescued)
         {
-            victimNpc.SetState(VictimNPC.VictimState.Idle);
+            victimNpc.SetState(victimNpc.IsLost ? VictimNPC.VictimState.Lost : VictimNPC.VictimState.Idle);
         }
 
         UpdateFeedbackColor();
@@ -285,6 +329,12 @@ public class VictimHandHoldController : MonoBehaviour
 
     private float GetEffectivePlayerSpeedMultiplier()
     {
+        if (victimNpc != null && victimNpc.IsLost)
+        {
+            var lostDragSpeedMultiplier = Mathf.Lerp(1f, LostVictimMinimumSpeedMultiplier, victimNpc.Weight);
+            return Mathf.Clamp(lostDragSpeedMultiplier, MinimumPlayerSpeedMultiplier, 1f);
+        }
+
         var influenceMultiplier = 1f - movementSpeedInfluence;
         return Mathf.Clamp(
             Mathf.Min(playerSpeedMultiplierWhileHolding, influenceMultiplier),
@@ -301,15 +351,25 @@ public class VictimHandHoldController : MonoBehaviour
         }
     }
 
-    private void KeepUpright()
+    private void KeepBodyPose()
     {
         var currentEulerAngles = body.rotation.eulerAngles;
-        body.MoveRotation(Quaternion.Euler(0f, currentEulerAngles.y, 0f));
+        var targetRotation = victimNpc != null && victimNpc.IsLost
+            ? Quaternion.Euler(90f, currentEulerAngles.y, 0f)
+            : Quaternion.Euler(0f, currentEulerAngles.y, 0f);
+
+        body.MoveRotation(targetRotation);
     }
 
     private void UpdateFeedbackColor()
     {
         if (victimNpc != null && victimNpc.IsRescued)
+        {
+            victimNpc.RefreshStatusColor();
+            return;
+        }
+
+        if (victimNpc != null && victimNpc.IsLost && !isHeld && hoverCount <= 0)
         {
             victimNpc.RefreshStatusColor();
             return;
@@ -365,5 +425,65 @@ public class VictimHandHoldController : MonoBehaviour
                 material.SetColor("_Color", color);
             }
         }
+    }
+
+    private bool TryGetReferenceHandPosition(out Vector3 referencePosition)
+    {
+        referencePosition = default;
+        if (activeHandTransforms.Count == 0)
+        {
+            return false;
+        }
+
+        if (!victimNpc.IsLost)
+        {
+            referencePosition = activeHandTransforms[0].position;
+            return true;
+        }
+
+        var validHands = 0;
+        var accumulatedPosition = Vector3.zero;
+        for (var index = 0; index < activeHandTransforms.Count; index++)
+        {
+            var handTransform = activeHandTransforms[index];
+            if (handTransform == null)
+            {
+                continue;
+            }
+
+            accumulatedPosition += handTransform.position;
+            validHands++;
+        }
+
+        if (validHands == 0)
+        {
+            return false;
+        }
+
+        referencePosition = accumulatedPosition / validHands;
+        return true;
+    }
+
+    private void RecalculateGripOffset()
+    {
+        if (!TryGetReferenceHandPosition(out var referencePosition))
+        {
+            localGripOffset = Vector3.zero;
+            return;
+        }
+
+        var gripStartPosition = gripCollider.ClosestPoint(referencePosition);
+        localGripOffset = transform.InverseTransformPoint(gripStartPosition);
+        localGripOffset.y = 0f;
+    }
+
+    private float GetCurrentMaxHandHoldSpeed()
+    {
+        if (victimNpc == null || !victimNpc.IsLost)
+        {
+            return maxHandHoldSpeed;
+        }
+
+        return Mathf.Max(0.1f, maxHandHoldSpeed * Mathf.Lerp(1f, LostVictimMinimumSpeedMultiplier, victimNpc.Weight));
     }
 }
