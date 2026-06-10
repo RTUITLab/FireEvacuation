@@ -107,7 +107,7 @@ public class VictimHandHoldController : MonoBehaviour
         var currentDistance = deltaToHand.magnitude;
         if (currentDistance <= leashSlackDistance)
         {
-            KeepUpright();
+            KeepBodyPose();
             return;
         }
 
