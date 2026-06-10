@@ -18,12 +18,12 @@ public class SceneRestartDebugHotkey : MonoBehaviour
 
     [Header("Режим работы")]
     [SerializeField] private bool debugRestartEnabled = true;
-    [SerializeField] private bool allowInReleaseBuild = false;
+    [SerializeField] private bool allowInReleaseBuild = true;
 
     [Header("Источник ввода")]
     [SerializeField] private InputActionReference restartAction;
-    [SerializeField] private XRNode controllerNode = XRNode.LeftHand;
-    [SerializeField] private ControllerButton controllerButton = ControllerButton.MenuButton;
+    [SerializeField] private XRNode controllerNode = XRNode.RightHand;
+    [SerializeField] private ControllerButton controllerButton = ControllerButton.SecondaryButton;
 
     [Header("Защита от случайного перезапуска")]
     [SerializeField] private float holdDuration = 0.75f;
@@ -32,6 +32,25 @@ public class SceneRestartDebugHotkey : MonoBehaviour
     private float holdTimer;
     private float cooldownTimer;
     private bool wasPressedLastFrame;
+
+    private void Start()
+    {
+        if (!debugRestartEnabled)
+        {
+            Debug.Log("SceneRestartDebugHotkey is disabled in Inspector.", this);
+            return;
+        }
+
+        if (!allowInReleaseBuild && !Application.isEditor && !Debug.isDebugBuild)
+        {
+            Debug.LogWarning("SceneRestartDebugHotkey is disabled in non-development build. Enable 'Allow In Release Build' to use restart on device.", this);
+        }
+
+        if (restartAction == null && controllerNode == XRNode.LeftHand && controllerButton == ControllerButton.MenuButton)
+        {
+            Debug.LogWarning("SceneRestartDebugHotkey uses LeftHand + MenuButton. On many XR devices this button is unavailable. Prefer RightHand + SecondaryButton or assign an Input Action.", this);
+        }
+    }
 
     private void OnEnable()
     {
@@ -53,7 +72,7 @@ public class SceneRestartDebugHotkey : MonoBehaviour
     private void Update()
     {
         // В релизной сборке инструмент по умолчанию не активен.
-        if (!debugRestartEnabled || (!allowInReleaseBuild && !Debug.isDebugBuild))
+        if (!debugRestartEnabled || (!allowInReleaseBuild && !Application.isEditor && !Debug.isDebugBuild))
         {
             ResetHoldState();
             return;
@@ -147,3 +166,4 @@ public class SceneRestartDebugHotkey : MonoBehaviour
         wasPressedLastFrame = false;
     }
 }
+
