@@ -72,9 +72,29 @@ public class HazardZone : MonoBehaviour
         return isActiveHazard ? hazardLevel * pathDangerWeight : 0f;
     }
 
+    public void SetHazardType(HazardType value)
+    {
+        hazardType = value;
+    }
+
     public void SetHazardLevel(float value)
     {
         hazardLevel = Mathf.Clamp01(value);
+    }
+
+    public void SetDamageRate(float value)
+    {
+        damageRate = value;
+    }
+
+    public void SetPanicRate(float value)
+    {
+        panicRate = value;
+    }
+
+    public void SetPathDangerWeight(float value)
+    {
+        pathDangerWeight = value;
     }
 
     public void SetActiveHazard(bool value)
