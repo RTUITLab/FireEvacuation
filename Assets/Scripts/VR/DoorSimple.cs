@@ -61,14 +61,10 @@ public class DoorSimple : XRBaseInteractable
     protected override void OnEnable()
     {
         base.OnEnable();
-        selectEntered.AddListener(OnSelectEntered);
-        selectExited.AddListener(OnSelectExited);
     }
 
     protected override void OnDisable()
     {
-        selectEntered.RemoveListener(OnSelectEntered);
-        selectExited.RemoveListener(OnSelectExited);
         activeInteractorTransform = null;
         activeInteractorComponent = null;
         base.OnDisable();
@@ -172,8 +168,10 @@ public class DoorSimple : XRBaseInteractable
         }
     }
 
-    private void OnSelectEntered(SelectEnterEventArgs args)
+    protected override void OnSelectEntered(SelectEnterEventArgs args)
     {
+        base.OnSelectEntered(args);
+
         activeInteractorComponent = args.interactorObject as Component;
         activeInteractorTransform = ResolveInteractorTransform(args.interactorObject);
         if (activeInteractorTransform == null)
@@ -192,8 +190,10 @@ public class DoorSimple : XRBaseInteractable
         grabStartDoorAngle = currentAngle;
     }
 
-    private void OnSelectExited(SelectExitEventArgs args)
+    protected override void OnSelectExited(SelectExitEventArgs args)
     {
+        base.OnSelectExited(args);
+
         activeInteractorTransform = null;
         activeInteractorComponent = null;
 
