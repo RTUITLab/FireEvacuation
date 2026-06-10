@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 [DisallowMultipleComponent]
@@ -23,6 +24,7 @@ public class HazardZone : MonoBehaviour
     [SerializeField] private Color neutralGizmoColor = new Color(1f, 0.92f, 0.16f, 0.2f);
 
     private Collider hazardCollider;
+    private readonly HashSet<VictimNPC> trackedVictims = new HashSet<VictimNPC>();
     private bool isActiveHazard = true;
 
     public bool AffectsNPC => affectsNPC;
@@ -39,6 +41,31 @@ public class HazardZone : MonoBehaviour
     {
         EnsureTriggerCollider();
         ClampSerializedValues();
+    }
+
+    private void OnDisable()
+    {
+        ClearTrackedVictims();
+    }
+
+    private void FixedUpdate()
+    {
+        if (!affectsNPC || !isActiveHazard || trackedVictims.Count == 0)
+        {
+            return;
+        }
+
+        var deltaTime = Time.fixedDeltaTime;
+        if (deltaTime <= 0f)
+        {
+            return;
+        }
+
+        trackedVictims.RemoveWhere(victim => victim == null);
+        foreach (var victim in trackedVictims)
+        {
+            victim.ApplyHazardEffect(this, deltaTime);
+        }
     }
 
     private void OnValidate()
@@ -102,6 +129,43 @@ public class HazardZone : MonoBehaviour
         isActiveHazard = value;
     }
 
+    private void OnTriggerEnter(Collider other)
+    {
+        if (!affectsNPC || other == null)
+        {
+            return;
+        }
+
+        var victim = other.GetComponentInParent<VictimNPC>();
+        if (victim == null)
+        {
+            return;
+        }
+
+        trackedVictims.Add(victim);
+        victim.SetCurrentHazardZone(this);
+    }
+
+    private void OnTriggerExit(Collider other)
+    {
+        if (other == null)
+        {
+            return;
+        }
+
+        var victim = other.GetComponentInParent<VictimNPC>();
+        if (victim == null)
+        {
+            return;
+        }
+
+        trackedVictims.Remove(victim);
+        if (victim.CurrentHazardZone == this)
+        {
+            victim.SetCurrentHazardZone(null);
+        }
+    }
+
     private void EnsureTriggerCollider()
     {
         hazardCollider = GetComponent<Collider>();
@@ -115,6 +179,19 @@ public class HazardZone : MonoBehaviour
     private void ClampSerializedValues()
     {
         hazardLevel = Mathf.Clamp01(hazardLevel);
+    }
+
+    private void ClearTrackedVictims()
+    {
+        foreach (var victim in trackedVictims)
+        {
+            if (victim != null && victim.CurrentHazardZone == this)
+            {
+                victim.SetCurrentHazardZone(null);
+            }
+        }
+
+        trackedVictims.Clear();
     }
 
     private void OnDrawGizmosSelected()

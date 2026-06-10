@@ -6,6 +6,10 @@ using UnityEngine.XR.Interaction.Toolkit.Interactables;
 [DisallowMultipleComponent]
 public class VictimNPC : MonoBehaviour
 {
+    private const float DefaultFearfulness = 0.5f;
+    private const float LowMovementSmokeDamageMultiplier = 0.5f;
+    private const float LowMovementSmokePanicMultiplier = 0.7f;
+
     public enum VictimState
     {
         Idle = 0,
@@ -17,6 +21,10 @@ public class VictimNPC : MonoBehaviour
     [SerializeField] private string npcId;
     [SerializeField] private bool isRescued;
     [SerializeField] private float condition = 1f;
+    [SerializeField] [Range(0f, 1f)] private float currentDamage;
+    [SerializeField] [Range(0f, 1f)] private float currentPanic;
+    [SerializeField] private HazardZone currentHazardZone;
+    [SerializeField] private bool isInLowMovement;
     [SerializeField] private VictimState initialState = VictimState.Idle;
     [SerializeField] private Color rescuedColor = new Color(0.24f, 0.85f, 0.32f, 1f);
 
@@ -26,13 +34,19 @@ public class VictimNPC : MonoBehaviour
     public string NpcId => npcId;
     public bool IsRescued => isRescued;
     public float Condition => condition;
+    public float CurrentDamage => currentDamage;
+    public float CurrentPanic => currentPanic;
+    public HazardZone CurrentHazardZone => currentHazardZone;
+    public bool IsInLowMovement => isInLowMovement;
     public VictimState CurrentState => currentState;
 
     private void Awake()
     {
         EnsureNpcId();
         EnsureUniqueNpcId();
-        condition = Mathf.Max(0f, condition);
+        condition = Mathf.Clamp01(condition);
+        currentDamage = Mathf.Clamp01(currentDamage);
+        currentPanic = Mathf.Clamp01(currentPanic);
         cachedRenderers = GetComponentsInChildren<Renderer>(true);
         currentState = isRescued ? VictimState.Rescued : initialState;
 
@@ -49,7 +63,9 @@ public class VictimNPC : MonoBehaviour
 
     private void OnValidate()
     {
-        condition = Mathf.Max(0f, condition);
+        condition = Mathf.Clamp01(condition);
+        currentDamage = Mathf.Clamp01(currentDamage);
+        currentPanic = Mathf.Clamp01(currentPanic);
         EnsureNpcId();
         EnsureUniqueNpcId();
     }
@@ -78,6 +94,38 @@ public class VictimNPC : MonoBehaviour
 
         Debug.Log($"VictimNPC '{npcId}' rescued.", this);
         return true;
+    }
+
+    public void ApplyHazardEffect(HazardZone zone, float deltaTime)
+    {
+        if (zone == null || deltaTime <= 0f || isRescued)
+        {
+            return;
+        }
+
+        currentHazardZone = zone;
+
+        var damageDelta = zone.GetDamageRate() * deltaTime;
+        var panicDelta = zone.GetPanicRate() * GetFearfulness() * deltaTime;
+
+        if (zone.GetHazardType() == HazardZone.HazardType.Smoke && isInLowMovement)
+        {
+            damageDelta *= LowMovementSmokeDamageMultiplier;
+            panicDelta *= LowMovementSmokePanicMultiplier;
+        }
+
+        currentDamage = Mathf.Clamp01(currentDamage + damageDelta);
+        currentPanic = Mathf.Clamp01(currentPanic + panicDelta);
+    }
+
+    public void SetCurrentHazardZone(HazardZone zone)
+    {
+        currentHazardZone = zone;
+    }
+
+    public void SetLowMovement(bool value)
+    {
+        isInLowMovement = value;
     }
 
     private void EnsureNpcId()
@@ -150,6 +198,12 @@ public class VictimNPC : MonoBehaviour
             body.isKinematic = true;
             body.useGravity = false;
         }
+    }
+
+    private float GetFearfulness()
+    {
+        // TODO: replace with VictimParameters.Fearfulness when NPC parameter data is introduced.
+        return DefaultFearfulness;
     }
 
     private void ApplyColor(Color color)
