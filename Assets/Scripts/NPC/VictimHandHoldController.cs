@@ -311,6 +311,13 @@ public class VictimHandHoldController : MonoBehaviour
     {
         if (victimNpc != null && victimNpc.IsRescued)
         {
+            victimNpc.RefreshStatusColor();
+            return;
+        }
+
+        if (victimNpc != null && victimNpc.IsCritical && !isHeld && hoverCount <= 0)
+        {
+            victimNpc.RefreshStatusColor();
             return;
         }
 

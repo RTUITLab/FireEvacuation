@@ -15,7 +15,8 @@ public class VictimNPC : MonoBehaviour
         Idle = 0,
         Following = 1,
         Dragged = 2,
-        Rescued = 3
+        Rescued = 3,
+        Critical = 4
     }
 
     [SerializeField] private string npcId;
@@ -25,11 +26,14 @@ public class VictimNPC : MonoBehaviour
     [SerializeField] [Range(0f, 1f)] private float currentPanic;
     [SerializeField] private HazardZone currentHazardZone;
     [SerializeField] private bool isInLowMovement;
+    [SerializeField] [Range(0f, 1f)] private float criticalDamageThreshold = 0.75f;
     [SerializeField] private VictimState initialState = VictimState.Idle;
     [SerializeField] private Color rescuedColor = new Color(0.24f, 0.85f, 0.32f, 1f);
+    [SerializeField] private Color criticalColor = new Color(0.82f, 0.16f, 0.16f, 1f);
 
     private VictimState currentState;
     private Renderer[] cachedRenderers;
+    private bool isCritical;
 
     public string NpcId => npcId;
     public bool IsRescued => isRescued;
@@ -38,6 +42,7 @@ public class VictimNPC : MonoBehaviour
     public float CurrentPanic => currentPanic;
     public HazardZone CurrentHazardZone => currentHazardZone;
     public bool IsInLowMovement => isInLowMovement;
+    public bool IsCritical => isCritical;
     public VictimState CurrentState => currentState;
 
     private void Awake()
@@ -47,12 +52,18 @@ public class VictimNPC : MonoBehaviour
         condition = Mathf.Clamp01(condition);
         currentDamage = Mathf.Clamp01(currentDamage);
         currentPanic = Mathf.Clamp01(currentPanic);
+        criticalDamageThreshold = Mathf.Clamp01(criticalDamageThreshold);
         cachedRenderers = GetComponentsInChildren<Renderer>(true);
-        currentState = isRescued ? VictimState.Rescued : initialState;
+        isCritical = !isRescued && currentDamage >= criticalDamageThreshold;
+        currentState = ResolveStateAfterStatusChange(initialState);
 
         if (isRescued)
         {
             ApplyColor(rescuedColor);
+        }
+        else if (isCritical)
+        {
+            EnterCriticalState(false);
         }
     }
 
@@ -66,6 +77,7 @@ public class VictimNPC : MonoBehaviour
         condition = Mathf.Clamp01(condition);
         currentDamage = Mathf.Clamp01(currentDamage);
         currentPanic = Mathf.Clamp01(currentPanic);
+        criticalDamageThreshold = Mathf.Clamp01(criticalDamageThreshold);
         EnsureNpcId();
         EnsureUniqueNpcId();
     }
@@ -74,6 +86,12 @@ public class VictimNPC : MonoBehaviour
     {
         if (isRescued && newState != VictimState.Rescued)
         {
+            return;
+        }
+
+        if (isCritical && newState != VictimState.Dragged && newState != VictimState.Rescued)
+        {
+            currentState = VictimState.Critical;
             return;
         }
 
@@ -88,6 +106,7 @@ public class VictimNPC : MonoBehaviour
         }
 
         isRescued = true;
+        isCritical = false;
         currentState = VictimState.Rescued;
         DisableActiveBehaviour();
         ApplyColor(rescuedColor);
@@ -116,6 +135,12 @@ public class VictimNPC : MonoBehaviour
 
         currentDamage = Mathf.Clamp01(currentDamage + damageDelta);
         currentPanic = Mathf.Clamp01(currentPanic + panicDelta);
+        condition = Mathf.Clamp01(1f - currentDamage);
+
+        if (!isCritical && currentDamage >= criticalDamageThreshold)
+        {
+            EnterCriticalState();
+        }
     }
 
     public void SetCurrentHazardZone(HazardZone zone)
@@ -126,6 +151,20 @@ public class VictimNPC : MonoBehaviour
     public void SetLowMovement(bool value)
     {
         isInLowMovement = value;
+    }
+
+    public void RefreshStatusColor()
+    {
+        if (isRescued)
+        {
+            ApplyColor(rescuedColor);
+            return;
+        }
+
+        if (isCritical)
+        {
+            ApplyColor(criticalColor);
+        }
     }
 
     private void EnsureNpcId()
@@ -200,10 +239,50 @@ public class VictimNPC : MonoBehaviour
         }
     }
 
+    private void EnterCriticalState(bool updateColor = true)
+    {
+        if (isRescued)
+        {
+            return;
+        }
+
+        isCritical = true;
+        if (currentState != VictimState.Dragged)
+        {
+            currentState = VictimState.Critical;
+        }
+
+        if (TryGetComponent<NavMeshAgent>(out var navMeshAgent) && navMeshAgent.enabled)
+        {
+            navMeshAgent.isStopped = true;
+            navMeshAgent.ResetPath();
+        }
+
+        if (updateColor)
+        {
+            ApplyColor(criticalColor);
+        }
+    }
+
     private float GetFearfulness()
     {
         // TODO: replace with VictimParameters.Fearfulness when NPC parameter data is introduced.
         return DefaultFearfulness;
+    }
+
+    private VictimState ResolveStateAfterStatusChange(VictimState fallbackState)
+    {
+        if (isRescued)
+        {
+            return VictimState.Rescued;
+        }
+
+        if (isCritical)
+        {
+            return VictimState.Critical;
+        }
+
+        return fallbackState;
     }
 
     private void ApplyColor(Color color)
