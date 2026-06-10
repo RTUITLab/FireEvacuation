@@ -87,18 +87,31 @@ public class ScenarioManager : MonoBehaviour
 
     public void NotifyVictimRescued(VictimNPC victim)
     {
+        // Пустое уведомление игнорируем сразу.
         if (victim == null)
         {
             return;
         }
 
+        // На всякий случай регистрируем NPC, если он ещё не был замечен менеджером.
         RegisterVictim(victim);
+
+        // После завершения сценария повторно ничего не финализируем,
+        // но прогресс в лог всё равно не дублируем.
+        if (runFinished)
+        {
+            Debug.Log($"ScenarioManager ignored rescued victim '{victim.NpcId}' because scenario is already finished. Progress: {rescuedNpcCount}/{totalNpcCount}.", this);
+            return;
+        }
+
+        // Одного и того же NPC дважды не засчитываем.
         if (!rescuedVictims.Add(victim))
         {
             Debug.Log($"ScenarioManager ignored duplicate rescued victim '{victim.NpcId}'. Progress: {rescuedNpcCount}/{totalNpcCount}.", this);
             return;
         }
 
+        // Пересчитываем счётчики после успешного добавления в список спасённых.
         RefreshCounters();
         if (runStarted && scenarioLogger != null)
         {
@@ -205,6 +218,6 @@ public class ScenarioManager : MonoBehaviour
             return;
         }
 
-        FinishScenario("all_rescued");
+        FinishScenario("AllVictimsRescued");
     }
 }

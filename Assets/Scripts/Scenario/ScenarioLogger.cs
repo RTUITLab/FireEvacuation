@@ -222,6 +222,7 @@ public class ScenarioLogger : MonoBehaviour
     {
         return completionStatus switch
         {
+            "AllVictimsRescued" => "AllVictimsRescued",
             "all_rescued" => "all_rescued",
             "time_expired" => "time_expired",
             "manual_stop" => "manual_stop",
