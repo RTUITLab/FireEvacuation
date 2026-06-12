@@ -17,6 +17,7 @@ public class NPCBehaviorController : MonoBehaviour
     [SerializeField] private bool applyStartStateOverride;
     [SerializeField] private NPCState startStateOverride = NPCState.MoveToPoint;
     [SerializeField] private NPCState debugStateToApply = NPCState.MoveToPoint;
+    [SerializeField] private Transform debugMoveTarget;
     [SerializeField] [Range(0f, 1f)] private float debugPanicStep = 0.1f;
     [SerializeField] [Range(0f, 1f)] private float debugDamageStep = 0.1f;
 
@@ -123,6 +124,19 @@ public class NPCBehaviorController : MonoBehaviour
     public void ResetToInitialState()
     {
         SetState(initialState);
+    }
+
+    [ContextMenu("Move To Debug Target")]
+    public void MoveToDebugTarget()
+    {
+        if (debugMoveTarget == null)
+        {
+            Debug.LogWarning($"NPC {name}: Debug move target is not assigned.", this);
+            return;
+        }
+
+        // Отладочный вызов использует позицию выбранного объекта как целевую точку для NavMeshAgent.
+        MoveTo(debugMoveTarget.position);
     }
 
     [ContextMenu("Add Debug Panic")]
