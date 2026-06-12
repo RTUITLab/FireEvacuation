@@ -39,6 +39,12 @@ public class NPCBehaviorController : MonoBehaviour
     [SerializeField] private float bestPointDesirability = float.NegativeInfinity;
     [SerializeField] private float currentPositionDesirability = float.NegativeInfinity;
 
+    [Header("Decision Loop")]
+    [SerializeField] [Min(0.05f)] private float decisionUpdateInterval = 0.5f;
+    [SerializeField] [Min(0f)] private float switchTargetThreshold = 0.05f;
+    [SerializeField] private NavigationProbePoint currentTargetPoint;
+    [SerializeField] private float currentTargetDesirability = float.NegativeInfinity;
+
     [Header("Debug")]
     [SerializeField] private bool applyStartStateOverride;
     [SerializeField] private NPCState startStateOverride = NPCState.MoveToPoint;
@@ -63,6 +69,7 @@ public class NPCBehaviorController : MonoBehaviour
     private NavMeshAgent navMeshAgent;
     private VictimNPC victimNpc;
     private bool isEvacuated;
+    private float nextDecisionUpdateTime;
     private readonly List<NavigationProbePoint> lastObservedProbePoints = new List<NavigationProbePoint>();
 
     private void Awake()
@@ -103,6 +110,11 @@ public class NPCBehaviorController : MonoBehaviour
     {
         RefreshVisibleProbeCandidates();
 
+        if (!isEvacuated && (currentState == NPCState.Idle || currentState == NPCState.MoveToPoint))
+        {
+            TryRunDecisionLoop();
+        }
+
         if (isEvacuated || navMeshAgent == null || !navMeshAgent.enabled || currentState != NPCState.MoveToPoint)
         {
             return;
@@ -125,6 +137,8 @@ public class NPCBehaviorController : MonoBehaviour
 
         // Когда агент дошел до цели, останавливаем его и возвращаем NPC в состояние ожидания.
         StopMovement();
+        currentTargetPoint = null;
+        currentTargetDesirability = currentPositionDesirability;
         SetState(NPCState.Idle);
     }
 
@@ -226,6 +240,8 @@ public class NPCBehaviorController : MonoBehaviour
 
         // После эвакуации NPC фиксируется в финальном состоянии и больше не принимает новые команды.
         isEvacuated = true;
+        currentTargetPoint = null;
+        currentTargetDesirability = float.NegativeInfinity;
         StopMovement();
         SetState(NPCState.Evacuated);
     }
@@ -344,6 +360,13 @@ public class NPCBehaviorController : MonoBehaviour
             + point.CommandTargetProximity * commandWeight;
     }
 
+    [ContextMenu("Run Decision Tick")]
+    public void RunDecisionTick()
+    {
+        RefreshVisibleProbeCandidates();
+        EvaluateBestPointDecision();
+    }
+
     private void ClampDynamicState()
     {
         currentPanic = Mathf.Clamp01(currentPanic);
@@ -363,6 +386,8 @@ public class NPCBehaviorController : MonoBehaviour
         commandWeight = Mathf.Clamp01(commandWeight);
         stayPointBonus = Mathf.Clamp01(stayPointBonus);
         stopCommandBonus = Mathf.Clamp01(stopCommandBonus);
+        decisionUpdateInterval = Mathf.Max(0.05f, decisionUpdateInterval);
+        switchTargetThreshold = Mathf.Max(0f, switchTargetThreshold);
     }
 
     private void ApplyMovementSpeed()
@@ -435,5 +460,77 @@ public class NPCBehaviorController : MonoBehaviour
         }
 
         return currentPositionBonus;
+    }
+
+    private void TryRunDecisionLoop()
+    {
+        if (!Application.isPlaying)
+        {
+            return;
+        }
+
+        if (Time.time < nextDecisionUpdateTime)
+        {
+            return;
+        }
+
+        nextDecisionUpdateTime = Time.time + decisionUpdateInterval;
+        EvaluateBestPointDecision();
+    }
+
+    private void EvaluateBestPointDecision()
+    {
+        NavigationProbePoint bestPoint = null;
+        var bestDesirability = currentPositionDesirability;
+
+        for (var index = 0; index < lastObservedProbePoints.Count; index++)
+        {
+            var probePoint = lastObservedProbePoints[index];
+            if (probePoint == null || !probePoint.VisibleForNPC)
+            {
+                continue;
+            }
+
+            var desirability = ScorePoint(probePoint);
+            if (desirability <= bestDesirability)
+            {
+                continue;
+            }
+
+            bestDesirability = desirability;
+            bestPoint = probePoint;
+        }
+
+        if (bestPoint == null)
+        {
+            // Если выгоднее остаться на месте, NPC не должен продолжать лишнее движение.
+            currentTargetPoint = null;
+            currentTargetDesirability = currentPositionDesirability;
+
+            if (currentState == NPCState.MoveToPoint)
+            {
+                StopMovement();
+                SetState(NPCState.Idle);
+            }
+
+            return;
+        }
+
+        if (currentTargetPoint == bestPoint)
+        {
+            currentTargetDesirability = bestDesirability;
+            return;
+        }
+
+        var activeTargetDesirability = currentTargetPoint != null ? currentTargetDesirability : currentPositionDesirability;
+        if (bestDesirability <= activeTargetDesirability + switchTargetThreshold)
+        {
+            return;
+        }
+
+        // Переключаем цель только когда новая точка заметно лучше текущей, чтобы NPC не дёргался.
+        currentTargetPoint = bestPoint;
+        currentTargetDesirability = bestDesirability;
+        MoveTo(bestPoint.Position);
     }
 }
