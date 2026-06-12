@@ -261,6 +261,7 @@ public class VictimHandHoldController : MonoBehaviour
 
         if (restoreIdleState && !victimNpc.IsRescued)
         {
+            // После отпускания NPC возвращается в обычное состояние или остаётся недееспособным.
             victimNpc.SetState(victimNpc.IsLost ? VictimNPC.VictimState.Lost : VictimNPC.VictimState.Idle);
         }
 
