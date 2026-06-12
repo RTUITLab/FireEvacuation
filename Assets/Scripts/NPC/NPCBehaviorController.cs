@@ -1,7 +1,9 @@
 using System;
 using UnityEngine;
+using UnityEngine.AI;
 
 [DisallowMultipleComponent]
+[RequireComponent(typeof(NavMeshAgent))]
 public class NPCBehaviorController : MonoBehaviour
 {
     [SerializeField] private NPCState initialState = NPCState.Idle;
@@ -26,8 +28,15 @@ public class NPCBehaviorController : MonoBehaviour
     public float PanicCriticalThreshold => panicCriticalThreshold;
     public float CriticalDamageThreshold => criticalDamageThreshold;
 
+    private NavMeshAgent navMeshAgent;
+
     private void Awake()
     {
+        if (!TryGetComponent(out navMeshAgent))
+        {
+            Debug.LogWarning($"NPC {name}: NavMeshAgent is missing. Movement commands will be ignored.", this);
+        }
+
         currentState = initialState;
         ClampDynamicState();
     }
@@ -60,6 +69,30 @@ public class NPCBehaviorController : MonoBehaviour
 
         Debug.Log($"NPC {name}: {oldState} -> {newState}", this);
         StateChanged?.Invoke(oldState, newState);
+    }
+
+    public void MoveTo(Vector3 position)
+    {
+        if (navMeshAgent == null)
+        {
+            Debug.LogWarning($"NPC {name}: MoveTo failed because NavMeshAgent is missing.", this);
+            return;
+        }
+
+        // При команде движения сразу переключаем NPC в состояние перемещения к точке.
+        navMeshAgent.SetDestination(position);
+        SetState(NPCState.MoveToPoint);
+    }
+
+    public void StopMovement()
+    {
+        if (navMeshAgent == null)
+        {
+            Debug.LogWarning($"NPC {name}: StopMovement ignored because NavMeshAgent is missing.", this);
+            return;
+        }
+
+        navMeshAgent.ResetPath();
     }
 
     public void AddPanic(float value)
