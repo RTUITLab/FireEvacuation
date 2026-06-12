@@ -74,6 +74,12 @@ public class NavigationProbePoint : MonoBehaviour
         isBlocked = blocked;
     }
 
+    public void SetNpcObservation(float npcDistance, bool isVisible)
+    {
+        distanceToNPC = Mathf.Max(0f, npcDistance);
+        visibleForNPC = isVisible;
+    }
+
     private void RefreshPosition()
     {
         position = transform.position;

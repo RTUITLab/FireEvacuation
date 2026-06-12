@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -20,6 +21,13 @@ public class NPCBehaviorController : MonoBehaviour
     [SerializeField] [Range(0f, 1f)] private float panicCriticalThreshold = 0.8f;
     [SerializeField] [Range(0f, 1f)] private float criticalDamageThreshold = 0.8f;
 
+    [Header("Probe Search")]
+    [SerializeField] [Min(0.5f)] private float probeSearchRadius = 8f;
+    [SerializeField] [Min(0.5f)] private float viewRadius = 5f;
+    [SerializeField] private LayerMask visibilityObstacleMask = ~0;
+    [SerializeField] private int lastCandidateCount;
+    [SerializeField] private int lastVisibleCandidateCount;
+
     [Header("Debug")]
     [SerializeField] private bool applyStartStateOverride;
     [SerializeField] private NPCState startStateOverride = NPCState.MoveToPoint;
@@ -36,10 +44,13 @@ public class NPCBehaviorController : MonoBehaviour
     public float PanicCriticalThreshold => panicCriticalThreshold;
     public float CriticalDamageThreshold => criticalDamageThreshold;
     public float ActualSpeed => actualSpeed;
+    public float ProbeSearchRadius => probeSearchRadius;
+    public float ViewRadius => viewRadius;
 
     private NavMeshAgent navMeshAgent;
     private VictimNPC victimNpc;
     private bool isEvacuated;
+    private readonly List<NavigationProbePoint> lastObservedProbePoints = new List<NavigationProbePoint>();
 
     private void Awake()
     {
@@ -53,6 +64,7 @@ public class NPCBehaviorController : MonoBehaviour
         currentState = initialState;
         ClampDynamicState();
         ApplyMovementSpeed();
+        RefreshVisibleProbeCandidates();
     }
 
     private void Start()
@@ -76,6 +88,8 @@ public class NPCBehaviorController : MonoBehaviour
 
     private void Update()
     {
+        RefreshVisibleProbeCandidates();
+
         if (isEvacuated || navMeshAgent == null || !navMeshAgent.enabled || currentState != NPCState.MoveToPoint)
         {
             return;
@@ -246,6 +260,46 @@ public class NPCBehaviorController : MonoBehaviour
         ReducePanic(debugPanicStep);
     }
 
+    [ContextMenu("Refresh Visible Probe Candidates")]
+    public void RefreshVisibleProbeCandidates()
+    {
+        ClearPreviousObservedProbePoints();
+
+        var probePoints = FindObjectsByType<NavigationProbePoint>(FindObjectsInactive.Include);
+        var candidateCount = 1;
+        var visibleCandidateCount = 1;
+        var origin = GetViewOrigin();
+
+        for (var index = 0; index < probePoints.Length; index++)
+        {
+            var probePoint = probePoints[index];
+            if (probePoint == null)
+            {
+                continue;
+            }
+
+            var distanceToProbe = Vector3.Distance(origin, probePoint.transform.position);
+            if (distanceToProbe > probeSearchRadius)
+            {
+                continue;
+            }
+
+            var isVisible = distanceToProbe <= viewRadius && !HasVisibilityObstacle(origin, probePoint.transform.position);
+            probePoint.SetNpcObservation(distanceToProbe, isVisible);
+            lastObservedProbePoints.Add(probePoint);
+            candidateCount++;
+
+            if (isVisible)
+            {
+                visibleCandidateCount++;
+            }
+        }
+
+        // Текущая позиция NPC всегда рассматривается как временный кандидат остаться на месте.
+        lastCandidateCount = candidateCount;
+        lastVisibleCandidateCount = visibleCandidateCount;
+    }
+
     private void ClampDynamicState()
     {
         currentPanic = Mathf.Clamp01(currentPanic);
@@ -256,6 +310,8 @@ public class NPCBehaviorController : MonoBehaviour
         debugDamageStep = Mathf.Clamp01(debugDamageStep);
         maxSpeed = Mathf.Max(0.05f, maxSpeed);
         minimumSafeMoveSpeed = Mathf.Clamp(minimumSafeMoveSpeed, 0.05f, maxSpeed);
+        probeSearchRadius = Mathf.Max(0.5f, probeSearchRadius);
+        viewRadius = Mathf.Clamp(viewRadius, 0.5f, probeSearchRadius);
     }
 
     private void ApplyMovementSpeed()
@@ -274,5 +330,48 @@ public class NPCBehaviorController : MonoBehaviour
         {
             navMeshAgent.speed = actualSpeed;
         }
+    }
+
+    private void ClearPreviousObservedProbePoints()
+    {
+        for (var index = 0; index < lastObservedProbePoints.Count; index++)
+        {
+            var probePoint = lastObservedProbePoints[index];
+            if (probePoint == null)
+            {
+                continue;
+            }
+
+            probePoint.SetNpcObservation(0f, false);
+        }
+
+        lastObservedProbePoints.Clear();
+    }
+
+    private Vector3 GetViewOrigin()
+    {
+        if (TryGetComponent<Collider>(out var bodyCollider))
+        {
+            return bodyCollider.bounds.center;
+        }
+
+        return transform.position;
+    }
+
+    private bool HasVisibilityObstacle(Vector3 origin, Vector3 targetPosition)
+    {
+        var direction = targetPosition - origin;
+        var distance = direction.magnitude;
+        if (distance <= 0.001f)
+        {
+            return false;
+        }
+
+        return Physics.Raycast(
+            origin,
+            direction.normalized,
+            distance,
+            visibilityObstacleMask,
+            QueryTriggerInteraction.Ignore);
     }
 }
