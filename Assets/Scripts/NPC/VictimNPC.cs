@@ -6,9 +6,6 @@ using UnityEngine.XR.Interaction.Toolkit.Interactables;
 [DisallowMultipleComponent]
 public class VictimNPC : MonoBehaviour
 {
-    private const float LowMovementSmokeDamageMultiplier = 0.5f;
-    private const float LowMovementSmokePanicMultiplier = 0.7f;
-
     public enum VictimState
     {
         Idle = 0,
@@ -28,6 +25,8 @@ public class VictimNPC : MonoBehaviour
     [SerializeField] private bool isInLowMovement;
     [SerializeField] private NPCParameterSet parameters = new NPCParameterSet();
     [SerializeField] [Range(0f, 1f)] private float criticalDamageThreshold = 0.75f;
+    [SerializeField] [Range(0f, 1f)] private float lowMovementSmokeDamageMultiplier = 0.5f;
+    [SerializeField] [Range(0f, 1f)] private float lowMovementSmokePanicMultiplier = 0.7f;
     [SerializeField] private VictimState initialState = VictimState.Idle;
     [SerializeField] private Color rescuedColor = new Color(0.24f, 0.85f, 0.32f, 1f);
     [SerializeField] private Color criticalColor = new Color(0.82f, 0.16f, 0.16f, 1f);
@@ -61,6 +60,8 @@ public class VictimNPC : MonoBehaviour
         EnsureParameters();
         parameters.ClampAll();
         criticalDamageThreshold = Mathf.Clamp01(criticalDamageThreshold);
+        lowMovementSmokeDamageMultiplier = Mathf.Clamp01(lowMovementSmokeDamageMultiplier);
+        lowMovementSmokePanicMultiplier = Mathf.Clamp01(lowMovementSmokePanicMultiplier);
         cachedRenderers = GetComponentsInChildren<Renderer>(true);
         isLost = !isRescued && currentDamage >= 1f;
         isCritical = !isRescued && !isLost && currentDamage >= criticalDamageThreshold;
@@ -93,6 +94,8 @@ public class VictimNPC : MonoBehaviour
         EnsureParameters();
         parameters.ClampAll();
         criticalDamageThreshold = Mathf.Clamp01(criticalDamageThreshold);
+        lowMovementSmokeDamageMultiplier = Mathf.Clamp01(lowMovementSmokeDamageMultiplier);
+        lowMovementSmokePanicMultiplier = Mathf.Clamp01(lowMovementSmokePanicMultiplier);
         EnsureNpcId();
         EnsureUniqueNpcId();
     }
@@ -155,15 +158,30 @@ public class VictimNPC : MonoBehaviour
         var damageDelta = zone.GetDamageRate() * deltaTime;
         var panicDelta = zone.GetPanicRate() * GetFearfulness() * deltaTime;
 
-        if (zone.GetHazardType() == HazardZone.HazardType.Smoke && isInLowMovement)
+        if (zone.GetHazardType() == HazardZone.HazardType.Smoke && zone.TryGetComponent<SmokeZone>(out var smokeZone))
         {
-            damageDelta *= LowMovementSmokeDamageMultiplier;
-            panicDelta *= LowMovementSmokePanicMultiplier;
+            var smokeLevel = smokeZone.GetSmokeLevel();
+            damageDelta = smokeLevel * smokeZone.GetSmokeDamageRate() * deltaTime;
+            panicDelta = smokeLevel * GetFearfulness() * smokeZone.GetSmokePanicGain() * deltaTime;
+
+            if (isInLowMovement)
+            {
+                // При низком движении уменьшаем вклад дыма в урон и рост паники.
+                damageDelta *= lowMovementSmokeDamageMultiplier;
+                panicDelta *= lowMovementSmokePanicMultiplier;
+            }
         }
 
         currentDamage = Mathf.Clamp01(currentDamage + damageDelta);
         currentPanic = Mathf.Clamp01(currentPanic + panicDelta);
         condition = Mathf.Clamp01(1f - currentDamage);
+
+        if (TryGetComponent<NPCBehaviorController>(out var behaviorController))
+        {
+            // Повреждение и паника от дыма должны обновлять и новое состояние NPC-контроллера.
+            behaviorController.AddDamage(damageDelta);
+            behaviorController.AddPanic(panicDelta);
+        }
 
         if (!isLost && currentDamage >= 1f)
         {
