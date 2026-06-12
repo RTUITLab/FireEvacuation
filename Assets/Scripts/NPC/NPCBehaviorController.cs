@@ -154,7 +154,8 @@ public class NPCBehaviorController : MonoBehaviour
 
         if (currentState == NPCState.Chaotic)
         {
-            StopMovement();
+            // В хаотичном состоянии после достижения точки сразу выбираем следующую.
+            MoveToChaoticPoint();
             return;
         }
 
@@ -656,11 +657,19 @@ public class NPCBehaviorController : MonoBehaviour
         var visibleUnblockedPoints = new List<NavigationProbePoint>();
         NavigationProbePoint nearestUnblockedPoint = null;
         var nearestDistance = float.MaxValue;
+        var minimumChaoticPointDistance = navMeshAgent != null
+            ? navMeshAgent.stoppingDistance + 0.1f
+            : 0.1f;
 
         for (var index = 0; index < lastObservedProbePoints.Count; index++)
         {
             var probePoint = lastObservedProbePoints[index];
             if (probePoint == null || probePoint.IsBlocked)
+            {
+                continue;
+            }
+
+            if (probePoint.DistanceToNPC <= minimumChaoticPointDistance)
             {
                 continue;
             }
