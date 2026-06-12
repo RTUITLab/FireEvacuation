@@ -20,6 +20,9 @@ public class NPCBehaviorController : MonoBehaviour
     [SerializeField] [Range(0f, 1f)] private float currentDamage;
     [SerializeField] [Range(0f, 1f)] private float panicCriticalThreshold = 0.8f;
     [SerializeField] [Range(0f, 1f)] private float criticalDamageThreshold = 0.8f;
+    [SerializeField] [Min(0f)] private float minChaoticDuration = 1.5f;
+    [SerializeField] [Min(0f)] private float maxExtraChaoticDuration = 3f;
+    [SerializeField] private float currentChaoticEndTime;
 
     [Header("Probe Search")]
     [SerializeField] [Min(0.5f)] private float probeSearchRadius = 8f;
@@ -116,6 +119,7 @@ public class NPCBehaviorController : MonoBehaviour
     private void Update()
     {
         RefreshVisibleProbeCandidates();
+        UpdateCriticalStateTransitions();
 
         if (!isEvacuated
             && (currentState == NPCState.Idle
@@ -145,6 +149,12 @@ public class NPCBehaviorController : MonoBehaviour
 
         if (navMeshAgent.hasPath && navMeshAgent.velocity.sqrMagnitude > 0.0001f)
         {
+            return;
+        }
+
+        if (currentState == NPCState.Chaotic)
+        {
+            StopMovement();
             return;
         }
 
@@ -262,6 +272,7 @@ public class NPCBehaviorController : MonoBehaviour
         currentTargetDesirability = float.NegativeInfinity;
         hasActiveCommandOverride = false;
         activeCommandHasTargetPosition = false;
+        currentChaoticEndTime = 0f;
         StopMovement();
         SetState(NPCState.Evacuated);
     }
@@ -423,6 +434,8 @@ public class NPCBehaviorController : MonoBehaviour
         debugDamageStep = Mathf.Clamp01(debugDamageStep);
         maxSpeed = Mathf.Max(0.05f, maxSpeed);
         minimumSafeMoveSpeed = Mathf.Clamp(minimumSafeMoveSpeed, 0.05f, maxSpeed);
+        minChaoticDuration = Mathf.Max(0f, minChaoticDuration);
+        maxExtraChaoticDuration = Mathf.Max(0f, maxExtraChaoticDuration);
         probeSearchRadius = Mathf.Max(0.5f, probeSearchRadius);
         viewRadius = Mathf.Clamp(viewRadius, 0.5f, probeSearchRadius);
         orientationWeight = Mathf.Clamp01(orientationWeight);
@@ -518,6 +531,35 @@ public class NPCBehaviorController : MonoBehaviour
         EvaluateBestPointDecision();
     }
 
+    private void UpdateCriticalStateTransitions()
+    {
+        if (isEvacuated || !Application.isPlaying)
+        {
+            return;
+        }
+
+        if (currentState == NPCState.Chaotic)
+        {
+            if (Time.time >= currentChaoticEndTime)
+            {
+                // После завершения хаотичного состояния NPC возвращается к обычной логике.
+                currentTargetPoint = null;
+                currentTargetDesirability = currentPositionDesirability;
+                currentChaoticEndTime = 0f;
+                currentPanic = Mathf.Min(currentPanic, Mathf.Max(0f, panicCriticalThreshold - 0.01f));
+                StopMovement();
+                SetState(NPCState.Idle);
+            }
+
+            return;
+        }
+
+        if (currentPanic >= panicCriticalThreshold)
+        {
+            EnterChaoticState();
+        }
+    }
+
     private void EvaluateBestPointDecision()
     {
         NavigationProbePoint bestPoint = null;
@@ -572,6 +614,78 @@ public class NPCBehaviorController : MonoBehaviour
         currentTargetPoint = bestPoint;
         currentTargetDesirability = bestDesirability;
         MoveTo(bestPoint.Position, ResolveMovementStateForCurrentCommand());
+    }
+
+    private void EnterChaoticState()
+    {
+        hasActiveCommandOverride = false;
+        activeCommandHasTargetPosition = false;
+        currentTargetPoint = null;
+        currentTargetDesirability = float.NegativeInfinity;
+        currentChaoticEndTime = Time.time + GetChaoticDuration();
+        SetState(NPCState.Chaotic);
+        MoveToChaoticPoint();
+    }
+
+    private float GetChaoticDuration()
+    {
+        var chaoticBehaviorDuration = victimNpc != null && victimNpc.Parameters != null
+            ? victimNpc.Parameters.ChaoticBehaviorDuration
+            : 0f;
+
+        // Длительность хаотичного состояния складывается из базового минимума и коэффициента NPC.
+        return minChaoticDuration + Mathf.Clamp01(chaoticBehaviorDuration) * maxExtraChaoticDuration;
+    }
+
+    private void MoveToChaoticPoint()
+    {
+        var selectedPoint = SelectChaoticPoint();
+        if (selectedPoint == null)
+        {
+            StopMovement();
+            return;
+        }
+
+        currentTargetPoint = selectedPoint;
+        currentTargetDesirability = float.NegativeInfinity;
+        MoveTo(selectedPoint.Position, NPCState.Chaotic);
+    }
+
+    private NavigationProbePoint SelectChaoticPoint()
+    {
+        var visibleUnblockedPoints = new List<NavigationProbePoint>();
+        NavigationProbePoint nearestUnblockedPoint = null;
+        var nearestDistance = float.MaxValue;
+
+        for (var index = 0; index < lastObservedProbePoints.Count; index++)
+        {
+            var probePoint = lastObservedProbePoints[index];
+            if (probePoint == null || probePoint.IsBlocked)
+            {
+                continue;
+            }
+
+            if (probePoint.VisibleForNPC)
+            {
+                visibleUnblockedPoints.Add(probePoint);
+            }
+
+            if (probePoint.DistanceToNPC < nearestDistance)
+            {
+                nearestDistance = probePoint.DistanceToNPC;
+                nearestUnblockedPoint = probePoint;
+            }
+        }
+
+        if (visibleUnblockedPoints.Count > 0)
+        {
+            // В хаотичном состоянии NPC выбирает случайную видимую незаблокированную точку.
+            var randomIndex = UnityEngine.Random.Range(0, visibleUnblockedPoints.Count);
+            return visibleUnblockedPoints[randomIndex];
+        }
+
+        // Если видимых точек нет, выбираем ближайшую незаблокированную.
+        return nearestUnblockedPoint;
     }
 
     private float EvaluateCommandPointBonus(Vector3 pointPosition, float trustToRescuer)
