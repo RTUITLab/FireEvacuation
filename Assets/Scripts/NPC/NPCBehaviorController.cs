@@ -546,7 +546,7 @@ public class NPCBehaviorController : MonoBehaviour
                 currentTargetPoint = null;
                 currentTargetDesirability = currentPositionDesirability;
                 currentChaoticEndTime = 0f;
-                currentPanic = Mathf.Min(currentPanic, Mathf.Max(0f, panicCriticalThreshold - 0.01f));
+                currentPanic = 0f;
                 StopMovement();
                 SetState(NPCState.Idle);
             }
