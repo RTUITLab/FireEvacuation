@@ -1,5 +1,4 @@
-using System;
-using System.Reflection;
+using TMPro;
 using UnityEngine;
 
 [DisallowMultipleComponent]
@@ -16,13 +15,13 @@ public class NPCDebugView : MonoBehaviour
     [SerializeField] private Color evacuatedColor = new Color(0.18f, 0.94f, 0.78f, 1f);
     [Header("Label")]
     [SerializeField] private bool createWorldLabel = true;
+    [SerializeField] private GameObject labelPrefab;
     [SerializeField] private Vector3 labelOffset = new Vector3(0f, 1.4f, 0f);
 
     private NPCBehaviorController behaviorController;
     private Renderer[] targetRenderers;
-    private Component tmpLabel;
+    private TMP_Text labelText;
     private Transform labelTransform;
-    private PropertyInfo tmpTextProperty;
 
     private void Awake()
     {
@@ -113,37 +112,34 @@ public class NPCDebugView : MonoBehaviour
 
     private void UpdateLabelText(NPCState state)
     {
-        if (tmpLabel == null || tmpTextProperty == null)
+        if (labelText == null)
         {
             return;
         }
 
-        tmpTextProperty.SetValue(tmpLabel, $"NPC {name}\n{state}");
+        labelText.text = $"NPC {name}\n{state}";
     }
 
     private void TryCreateWorldLabel()
     {
-        if (!createWorldLabel)
+        if (!createWorldLabel || labelPrefab == null)
         {
             return;
         }
 
-        var textMeshProType = Type.GetType("TMPro.TextMeshPro, Unity.TextMeshPro");
-        if (textMeshProType == null)
+        if (labelTransform != null)
         {
             return;
         }
 
-        var labelObject = new GameObject("NPC Debug Label");
-        labelObject.transform.SetParent(transform, false);
-        labelObject.transform.localPosition = labelOffset;
+        // Лейбл создаётся из prefab, чтобы его размер и внешний вид можно было настраивать в инспекторе.
+        var labelObject = Instantiate(labelPrefab, transform);
+        labelObject.name = $"{labelPrefab.name} (Runtime)";
         labelTransform = labelObject.transform;
+        labelTransform.localPosition = labelOffset;
+        labelTransform.localRotation = Quaternion.identity;
 
-        tmpLabel = labelObject.AddComponent(textMeshProType);
-        tmpTextProperty = textMeshProType.GetProperty("text", BindingFlags.Instance | BindingFlags.Public);
-
-        var fontSizeProperty = textMeshProType.GetProperty("fontSize", BindingFlags.Instance | BindingFlags.Public);
-        fontSizeProperty?.SetValue(tmpLabel, 3f);
+        labelText = labelObject.GetComponentInChildren<TMP_Text>(true);
     }
 
     private Color GetStateColor(NPCState state)
