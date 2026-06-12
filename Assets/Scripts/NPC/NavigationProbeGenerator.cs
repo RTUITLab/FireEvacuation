@@ -8,6 +8,7 @@ public class NavigationProbeGenerator : MonoBehaviour
     [Header("Generation")]
     [SerializeField] private bool generateOnStart = true;
     [SerializeField] [Min(0.25f)] private float probeSpacing = 1f;
+    [SerializeField] [Min(0.25f)] private float verticalProbeSpacing = 2f;
     [SerializeField] private bool useAttachedBoxCollider = true;
     [SerializeField] private Vector3 manualBoundsSize = new Vector3(10f, 2f, 10f);
     [SerializeField] [Min(0.1f)] private float sampleMaxDistance = 1.5f;
@@ -36,6 +37,7 @@ public class NavigationProbeGenerator : MonoBehaviour
     private void OnValidate()
     {
         probeSpacing = Mathf.Max(0.25f, probeSpacing);
+        verticalProbeSpacing = Mathf.Max(0.25f, verticalProbeSpacing);
         sampleMaxDistance = Mathf.Max(0.1f, sampleMaxDistance);
         manualBoundsSize.x = Mathf.Max(0.1f, manualBoundsSize.x);
         manualBoundsSize.y = Mathf.Max(0.1f, manualBoundsSize.y);
@@ -49,28 +51,31 @@ public class NavigationProbeGenerator : MonoBehaviour
         ClearGeneratedProbes();
 
         var generationBounds = ResolveGenerationBounds();
-        var topY = generationBounds.max.y;
         var createdCount = 0;
         var usedPositions = new HashSet<string>();
 
         for (var x = generationBounds.min.x; x <= generationBounds.max.x; x += probeSpacing)
         {
-            for (var z = generationBounds.min.z; z <= generationBounds.max.z; z += probeSpacing)
+            for (var y = generationBounds.min.y; y <= generationBounds.max.y; y += verticalProbeSpacing)
             {
-                var samplePosition = new Vector3(x, topY, z);
-                if (!NavMesh.SamplePosition(samplePosition, out var hit, sampleMaxDistance, NavMesh.AllAreas))
+                for (var z = generationBounds.min.z; z <= generationBounds.max.z; z += probeSpacing)
                 {
-                    continue;
-                }
+                    var samplePosition = new Vector3(x, y, z);
+                    if (!NavMesh.SamplePosition(samplePosition, out var hit, sampleMaxDistance, NavMesh.AllAreas))
+                    {
+                        continue;
+                    }
 
-                var positionKey = BuildPositionKey(hit.position);
-                if (!usedPositions.Add(positionKey))
-                {
-                    continue;
-                }
+                    var positionKey = BuildPositionKey(hit.position);
+                    if (!usedPositions.Add(positionKey))
+                    {
+                        continue;
+                    }
 
-                CreateProbe(hit.position, createdCount);
-                createdCount++;
+                    // Проверяем точки по всей высоте объёма, чтобы многоэтажный NavMesh тоже получал пробы.
+                    CreateProbe(hit.position, createdCount);
+                    createdCount++;
+                }
             }
         }
 
