@@ -12,13 +12,13 @@ charset = utf-8-bom
 charset = utf-8-bom
 
 [*.json]
-charset = utf-8-bom
+charset = utf-8
 
 [*.yml]
-charset = utf-8-bom
+charset = utf-8
 
 [*.yaml]
-charset = utf-8-bom
+charset = utf-8
 
 [*.txt]
 charset = utf-8-bom

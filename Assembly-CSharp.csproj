@@ -74,6 +74,7 @@
     <Compile Include="Assets\VRTemplateAssets\Scripts\XRPokeFollowAffordanceFill.cs" />
     <Compile Include="Assets\Scripts\NPC\NPCDebugView.cs" />
     <Compile Include="Assets\Scripts\NPC\NPCParameterSet.cs" />
+    <Compile Include="Assets\Scripts\NPC\ExitProximityCalculator.cs" />
     <Compile Include="Assets\VRTemplateAssets\Scripts\BezierCurve.cs" />
     <Compile Include="Assets\VRTemplateAssets\Scripts\LaunchProjectile.cs" />
     <Compile Include="Assets\Scripts\Core\SceneRestartDebugHotkey.cs" />
@@ -85,15 +86,20 @@
     <Compile Include="Assets\VRTemplateAssets\Scripts\DestroyObject.cs" />
     <Compile Include="Assets\VRTemplateAssets\Scripts\VideoTimeScrubControl.cs" />
     <Compile Include="Assets\Scripts\VR\NearOnlyGrabInteractable.cs" />
+    <Compile Include="Assets\Scripts\NPC\NPCCommandReceiver.cs" />
     <Compile Include="Assets\VRTemplateAssets\Scripts\Callout.cs" />
     <Compile Include="Assets\VRTemplateAssets\Scripts\CalloutGazeController.cs" />
     <Compile Include="Assets\Scripts\Threats\SmokeZone.cs" />
+    <Compile Include="Assets\Scripts\NPC\ExitPoint.cs" />
+    <Compile Include="Assets\Scripts\NPC\NavigationProbePoint.cs" />
     <Compile Include="Assets\Scripts\VR\PlayerSpeedModifier.cs" />
+    <Compile Include="Assets\Scripts\NPC\NPCCommandType.cs" />
     <Compile Include="Assets\VRTemplateAssets\Scripts\StepManager.cs" />
     <Compile Include="Assets\Scripts\VR\DoorSimple.cs" />
     <Compile Include="Assets\Scripts\Scenario\ScenarioManager.cs" />
     <Compile Include="Assets\Scripts\Threats\HazardZone.cs" />
     <Compile Include="Assets\VRTemplateAssets\Scripts\AnchorVisuals.cs" />
+    <Compile Include="Assets\Scripts\NPC\NavigationProbeGenerator.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Assets\TextMesh Pro\Shaders\TMPro.cginc" />
