@@ -45,6 +45,12 @@ public class NPCBehaviorController : MonoBehaviour
     [SerializeField] private NavigationProbePoint currentTargetPoint;
     [SerializeField] private float currentTargetDesirability = float.NegativeInfinity;
 
+    [Header("Command Override")]
+    [SerializeField] private bool hasActiveCommandOverride;
+    [SerializeField] private NPCCommandType activeCommandType = NPCCommandType.Stop;
+    [SerializeField] private Vector3 activeCommandTargetPosition;
+    [SerializeField] private bool activeCommandHasTargetPosition;
+
     [Header("Debug")]
     [SerializeField] private bool applyStartStateOverride;
     [SerializeField] private NPCState startStateOverride = NPCState.MoveToPoint;
@@ -65,6 +71,8 @@ public class NPCBehaviorController : MonoBehaviour
     public float ViewRadius => viewRadius;
     public float BestPointDesirability => bestPointDesirability;
     public float CurrentPositionDesirability => currentPositionDesirability;
+    public bool HasActiveCommandOverride => hasActiveCommandOverride;
+    public NPCCommandType ActiveCommandType => activeCommandType;
 
     private NavMeshAgent navMeshAgent;
     private VictimNPC victimNpc;
@@ -110,12 +118,18 @@ public class NPCBehaviorController : MonoBehaviour
     {
         RefreshVisibleProbeCandidates();
 
-        if (!isEvacuated && (currentState == NPCState.Idle || currentState == NPCState.MoveToPoint))
+        if (!isEvacuated
+            && (currentState == NPCState.Idle
+                || currentState == NPCState.MoveToPoint
+                || currentState == NPCState.FollowPlayer))
         {
             TryRunDecisionLoop();
         }
 
-        if (isEvacuated || navMeshAgent == null || !navMeshAgent.enabled || currentState != NPCState.MoveToPoint)
+        if (isEvacuated
+            || navMeshAgent == null
+            || !navMeshAgent.enabled
+            || (currentState != NPCState.MoveToPoint && currentState != NPCState.FollowPlayer))
         {
             return;
         }
@@ -163,6 +177,11 @@ public class NPCBehaviorController : MonoBehaviour
 
     public void MoveTo(Vector3 position)
     {
+        MoveTo(position, NPCState.MoveToPoint);
+    }
+
+    public void MoveTo(Vector3 position, NPCState movementState)
+    {
         if (isEvacuated)
         {
             return;
@@ -178,7 +197,7 @@ public class NPCBehaviorController : MonoBehaviour
         ApplyMovementSpeed();
         navMeshAgent.isStopped = false;
         navMeshAgent.SetDestination(position);
-        SetState(NPCState.MoveToPoint);
+        SetState(movementState);
     }
 
     public void StopMovement()
@@ -242,8 +261,34 @@ public class NPCBehaviorController : MonoBehaviour
         isEvacuated = true;
         currentTargetPoint = null;
         currentTargetDesirability = float.NegativeInfinity;
+        hasActiveCommandOverride = false;
+        activeCommandHasTargetPosition = false;
         StopMovement();
         SetState(NPCState.Evacuated);
+    }
+
+    public void ApplyCommandOverride(NPCCommandType commandType, Vector3? targetPosition = null)
+    {
+        if (isEvacuated)
+        {
+            return;
+        }
+
+        hasActiveCommandOverride = true;
+        activeCommandType = commandType;
+        activeCommandHasTargetPosition = targetPosition.HasValue;
+        activeCommandTargetPosition = targetPosition ?? transform.position;
+        currentTargetPoint = null;
+        currentTargetDesirability = float.NegativeInfinity;
+
+        if (victimNpc != null)
+        {
+            victimNpc.SetLowMovement(commandType == NPCCommandType.LowMovement);
+        }
+
+        // Новая команда перезаписывает прошлую и сразу обновляет выбор точек только у этого NPC.
+        RefreshVisibleProbeCandidates();
+        EvaluateBestPointDecision();
     }
 
     [ContextMenu("Apply Debug State")]
@@ -351,13 +396,15 @@ public class NPCBehaviorController : MonoBehaviour
         var dangerAvoidance = parameters != null ? parameters.DangerAvoidance : 1f;
         var trustToRescuer = parameters != null ? parameters.TrustToRescuer : 1f;
         var distanceToPoint = Mathf.Clamp01(point.DistanceToNPC / Mathf.Max(probeSearchRadius, 0.001f));
+        var commandBonus = EvaluateCommandPointBonus(point.Position, trustToRescuer);
 
         // Формула оценивает выгодность точки по близости к выходу, риску, расстоянию и влиянию спасателя/команды.
         return point.ExitProximity * spatialOrientation * orientationWeight
             - point.PointDanger * dangerAvoidance * dangerWeight
             - distanceToPoint * distanceWeight
             + point.RescuerProximity * trustToRescuer * rescuerWeight
-            + point.CommandTargetProximity * commandWeight;
+            + point.CommandTargetProximity * commandWeight
+            + commandBonus;
     }
 
     [ContextMenu("Run Decision Tick")]
@@ -453,13 +500,11 @@ public class NPCBehaviorController : MonoBehaviour
 
     private float ScoreCurrentPosition()
     {
-        var currentPositionBonus = stayPointBonus;
-        if (currentState == NPCState.Idle)
-        {
-            currentPositionBonus += stopCommandBonus;
-        }
+        var trustToRescuer = victimNpc != null && victimNpc.Parameters != null
+            ? victimNpc.Parameters.TrustToRescuer
+            : 1f;
 
-        return currentPositionBonus;
+        return stayPointBonus + EvaluateCommandPointBonus(transform.position, trustToRescuer);
     }
 
     private void TryRunDecisionLoop()
@@ -507,7 +552,7 @@ public class NPCBehaviorController : MonoBehaviour
             currentTargetPoint = null;
             currentTargetDesirability = currentPositionDesirability;
 
-            if (currentState == NPCState.MoveToPoint)
+            if (currentState == NPCState.MoveToPoint || currentState == NPCState.FollowPlayer)
             {
                 StopMovement();
                 SetState(NPCState.Idle);
@@ -531,6 +576,63 @@ public class NPCBehaviorController : MonoBehaviour
         // Переключаем цель только когда новая точка заметно лучше текущей, чтобы NPC не дёргался.
         currentTargetPoint = bestPoint;
         currentTargetDesirability = bestDesirability;
-        MoveTo(bestPoint.Position);
+        MoveTo(bestPoint.Position, ResolveMovementStateForCurrentCommand());
+    }
+
+    private float EvaluateCommandPointBonus(Vector3 pointPosition, float trustToRescuer)
+    {
+        if (!hasActiveCommandOverride)
+        {
+            return 0f;
+        }
+
+        switch (activeCommandType)
+        {
+            case NPCCommandType.FollowPlayer:
+                if (!activeCommandHasTargetPosition)
+                {
+                    return 0f;
+                }
+
+                return CalculateTargetProximity(pointPosition, activeCommandTargetPosition)
+                    * trustToRescuer
+                    * commandWeight;
+            case NPCCommandType.Stop:
+                // Команда Stop удерживает приоритет области, где NPC получил приказ остановиться.
+                return CalculateTargetProximity(pointPosition, activeCommandTargetPosition)
+                    * stopCommandBonus
+                    * trustToRescuer;
+            case NPCCommandType.GoThere:
+                if (!activeCommandHasTargetPosition)
+                {
+                    return 0f;
+                }
+
+                // Команда GoThere усиливает точки рядом с целью, пока другая точка не станет заметно лучше.
+                return CalculateTargetProximity(pointPosition, activeCommandTargetPosition)
+                    * commandWeight
+                    * trustToRescuer;
+            case NPCCommandType.LowMovement:
+                return 0f;
+            default:
+                return 0f;
+        }
+    }
+
+    private float CalculateTargetProximity(Vector3 pointPosition, Vector3 targetPosition)
+    {
+        var distance = Vector3.Distance(pointPosition, targetPosition);
+        var normalizedDistance = Mathf.Clamp01(distance / Mathf.Max(probeSearchRadius, 0.001f));
+        return 1f - normalizedDistance;
+    }
+
+    private NPCState ResolveMovementStateForCurrentCommand()
+    {
+        if (hasActiveCommandOverride && activeCommandType == NPCCommandType.FollowPlayer)
+        {
+            return NPCState.FollowPlayer;
+        }
+
+        return NPCState.MoveToPoint;
     }
 }

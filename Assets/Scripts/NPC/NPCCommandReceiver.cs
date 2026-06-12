@@ -129,36 +129,14 @@ public class NPCCommandReceiver : MonoBehaviour
 
     private void ApplyCommand(NPCCommandModel command)
     {
-        switch (command.Type)
+        Vector3? targetPosition = command.HasTargetPosition ? command.TargetPosition : null;
+
+        if (command.Type == NPCCommandType.GoThere && !targetPosition.HasValue)
         {
-            case NPCCommandType.FollowPlayer:
-                // После активации команды переводим NPC в состояние следования за игроком.
-                behaviorController.StopMovement();
-                behaviorController.SetState(NPCState.FollowPlayer);
-                break;
-            case NPCCommandType.Stop:
-                // Команда Stop останавливает текущее движение и возвращает NPC в ожидание.
-                behaviorController.StopMovement();
-                behaviorController.SetState(NPCState.Idle);
-                break;
-            case NPCCommandType.GoThere:
-                if (!command.HasTargetPosition)
-                {
-                    Debug.LogWarning($"NPC {name}: GoThere command has no target position.", this);
-                    return;
-                }
-
-                behaviorController.MoveTo(command.TargetPosition);
-                break;
-            case NPCCommandType.LowMovement:
-                if (victimNpc != null)
-                {
-                    victimNpc.SetLowMovement(true);
-                }
-
-                break;
-            default:
-                throw new ArgumentOutOfRangeException();
+            Debug.LogWarning($"NPC {name}: GoThere command has no target position.", this);
         }
+
+        // После задержки команда становится постоянным локальным модификатором выбора точек для этого NPC.
+        behaviorController.ApplyCommandOverride(command.Type, targetPosition);
     }
 }
