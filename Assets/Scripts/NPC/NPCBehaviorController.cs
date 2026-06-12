@@ -8,6 +8,10 @@ public class NPCBehaviorController : MonoBehaviour
 {
     [SerializeField] private NPCState initialState = NPCState.Idle;
     [SerializeField] private NPCState currentState = NPCState.Idle;
+    [Header("Movement")]
+    [SerializeField] [Min(0.05f)] private float maxSpeed = 1.75f;
+    [SerializeField] [Min(0.05f)] private float minimumSafeMoveSpeed = 0.15f;
+    [SerializeField] private float actualSpeed = 1.75f;
     [Header("Dynamic State")]
     [SerializeField] [Range(0f, 1f)] private float currentPanic;
     [SerializeField] [Range(0f, 1f)] private float currentDamage;
@@ -28,8 +32,10 @@ public class NPCBehaviorController : MonoBehaviour
     public float CurrentDamage => currentDamage;
     public float PanicCriticalThreshold => panicCriticalThreshold;
     public float CriticalDamageThreshold => criticalDamageThreshold;
+    public float ActualSpeed => actualSpeed;
 
     private NavMeshAgent navMeshAgent;
+    private VictimNPC victimNpc;
 
     private void Awake()
     {
@@ -38,8 +44,11 @@ public class NPCBehaviorController : MonoBehaviour
             Debug.LogWarning($"NPC {name}: NavMeshAgent is missing. Movement commands will be ignored.", this);
         }
 
+        TryGetComponent(out victimNpc);
+
         currentState = initialState;
         ClampDynamicState();
+        ApplyMovementSpeed();
     }
 
     private void Start()
@@ -56,6 +65,9 @@ public class NPCBehaviorController : MonoBehaviour
     private void OnValidate()
     {
         ClampDynamicState();
+        TryGetComponent(out navMeshAgent);
+        TryGetComponent(out victimNpc);
+        ApplyMovementSpeed();
     }
 
     private void Update()
@@ -108,6 +120,7 @@ public class NPCBehaviorController : MonoBehaviour
         }
 
         // При команде движения сразу переключаем NPC в состояние перемещения к точке.
+        ApplyMovementSpeed();
         navMeshAgent.SetDestination(position);
         SetState(NPCState.MoveToPoint);
     }
@@ -192,5 +205,29 @@ public class NPCBehaviorController : MonoBehaviour
         criticalDamageThreshold = Mathf.Clamp01(criticalDamageThreshold);
         debugPanicStep = Mathf.Clamp01(debugPanicStep);
         debugDamageStep = Mathf.Clamp01(debugDamageStep);
+        maxSpeed = Mathf.Max(0.05f, maxSpeed);
+        minimumSafeMoveSpeed = Mathf.Clamp(minimumSafeMoveSpeed, 0.05f, maxSpeed);
+    }
+
+    private void ApplyMovementSpeed()
+    {
+        var moveSpeedFactor = 1f;
+        var mobilityLimitFactor = 1f;
+
+        if (victimNpc != null && victimNpc.Parameters != null)
+        {
+            moveSpeedFactor = Mathf.Clamp01(victimNpc.Parameters.MoveSpeed);
+            mobilityLimitFactor = Mathf.Clamp01(victimNpc.Parameters.MobilityLimit);
+        }
+
+        // Базовая скорость берётся из MoveSpeed, а MobilityLimit ограничивает её сверху для малоподвижных NPC.
+        var desiredSpeed = maxSpeed * moveSpeedFactor;
+        var mobilityCappedSpeed = Mathf.Lerp(minimumSafeMoveSpeed, maxSpeed, mobilityLimitFactor);
+        actualSpeed = Mathf.Clamp(Mathf.Min(desiredSpeed, mobilityCappedSpeed), minimumSafeMoveSpeed, maxSpeed);
+
+        if (navMeshAgent != null)
+        {
+            navMeshAgent.speed = actualSpeed;
+        }
     }
 }
