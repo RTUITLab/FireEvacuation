@@ -20,6 +20,7 @@ public class NPCBehaviorController : MonoBehaviour
     [SerializeField] [Range(0f, 1f)] private float currentDamage;
     [SerializeField] [Range(0f, 1f)] private float panicCriticalThreshold = 0.8f;
     [SerializeField] [Range(0f, 1f)] private float criticalDamageThreshold = 0.8f;
+    [SerializeField] [Range(0f, 1f)] private float chaoticMinTravelDistance = 0.25f;
     [SerializeField] [Min(0f)] private float minChaoticDuration = 1.5f;
     [SerializeField] [Min(0f)] private float maxExtraChaoticDuration = 3f;
     [SerializeField] private float currentChaoticEndTime;
@@ -132,7 +133,9 @@ public class NPCBehaviorController : MonoBehaviour
         if (isEvacuated
             || navMeshAgent == null
             || !navMeshAgent.enabled
-            || (currentState != NPCState.MoveToPoint && currentState != NPCState.FollowPlayer))
+            || (currentState != NPCState.MoveToPoint
+                && currentState != NPCState.FollowPlayer
+                && currentState != NPCState.Chaotic))
         {
             return;
         }
@@ -431,6 +434,7 @@ public class NPCBehaviorController : MonoBehaviour
         currentDamage = Mathf.Clamp01(currentDamage);
         panicCriticalThreshold = Mathf.Clamp01(panicCriticalThreshold);
         criticalDamageThreshold = Mathf.Clamp01(criticalDamageThreshold);
+        chaoticMinTravelDistance = Mathf.Clamp01(chaoticMinTravelDistance);
         debugPanicStep = Mathf.Clamp01(debugPanicStep);
         debugDamageStep = Mathf.Clamp01(debugDamageStep);
         maxSpeed = Mathf.Max(0.05f, maxSpeed);
@@ -657,9 +661,9 @@ public class NPCBehaviorController : MonoBehaviour
         var visibleUnblockedPoints = new List<NavigationProbePoint>();
         NavigationProbePoint nearestUnblockedPoint = null;
         var nearestDistance = float.MaxValue;
-        var minimumChaoticPointDistance = navMeshAgent != null
-            ? navMeshAgent.stoppingDistance + 0.1f
-            : 0.1f;
+        var minimumChaoticPointDistance = Mathf.Max(
+            navMeshAgent != null ? navMeshAgent.stoppingDistance + 0.1f : 0.1f,
+            probeSearchRadius * chaoticMinTravelDistance);
 
         for (var index = 0; index < lastObservedProbePoints.Count; index++)
         {
