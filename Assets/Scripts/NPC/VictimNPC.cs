@@ -130,6 +130,12 @@ public class VictimNPC : MonoBehaviour
         isCritical = false;
         isLost = false;
         currentState = VictimState.Rescued;
+        if (TryGetComponent<NPCBehaviorController>(out var behaviorController))
+        {
+            // Синхронизируем старую эвакуацию VictimNPC с новым состоянием NPCBehaviorController.
+            behaviorController.MarkEvacuated();
+        }
+
         DisableActiveBehaviour();
         ApplyColor(rescuedColor);
 
