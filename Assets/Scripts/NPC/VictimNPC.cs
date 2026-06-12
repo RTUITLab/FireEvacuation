@@ -38,7 +38,6 @@ public class VictimNPC : MonoBehaviour
     private Renderer[] cachedRenderers;
     private bool isCritical;
     private bool isLost;
-    private NPCBehaviorController behaviorController;
 
     public string NpcId => npcId;
     public bool IsRescued => isRescued;
@@ -62,11 +61,9 @@ public class VictimNPC : MonoBehaviour
         weight = Mathf.Clamp01(weight);
         criticalDamageThreshold = Mathf.Clamp01(criticalDamageThreshold);
         cachedRenderers = GetComponentsInChildren<Renderer>(true);
-        behaviorController = GetComponent<NPCBehaviorController>();
         isLost = !isRescued && currentDamage >= 1f;
         isCritical = !isRescued && !isLost && currentDamage >= criticalDamageThreshold;
         currentState = ResolveStateAfterStatusChange(initialState);
-        SyncBehaviorState(currentState);
 
         if (isRescued)
         {
@@ -108,20 +105,16 @@ public class VictimNPC : MonoBehaviour
         if (isCritical && newState != VictimState.Dragged && newState != VictimState.Rescued)
         {
             currentState = VictimState.Critical;
-            SyncBehaviorState(currentState);
             return;
         }
 
         if (isLost && newState != VictimState.Dragged && newState != VictimState.Rescued)
         {
             currentState = VictimState.Lost;
-            SyncBehaviorState(currentState);
             return;
         }
 
-        // Базовый переход старого состояния NPC синхронизируется с новым контроллером поведения.
         currentState = isRescued ? VictimState.Rescued : newState;
-        SyncBehaviorState(currentState);
     }
 
     public bool MarkRescued()
@@ -135,7 +128,6 @@ public class VictimNPC : MonoBehaviour
         isCritical = false;
         isLost = false;
         currentState = VictimState.Rescued;
-        SyncBehaviorState(currentState);
         DisableActiveBehaviour();
         ApplyColor(rescuedColor);
 
@@ -189,7 +181,6 @@ public class VictimNPC : MonoBehaviour
         currentDamage = 1f;
         condition = 0f;
         currentState = VictimState.Lost;
-        SyncBehaviorState(currentState);
         StopSelfMovement();
         ApplyLostPresentation();
 
@@ -327,7 +318,6 @@ public class VictimNPC : MonoBehaviour
             // При критическом уроне NPC переходит в недееспособное состояние.
             currentState = VictimState.Critical;
         }
-        SyncBehaviorState(currentState);
 
         StopSelfMovement();
 
@@ -407,27 +397,4 @@ public class VictimNPC : MonoBehaviour
         }
     }
 
-    private void SyncBehaviorState(VictimState victimState)
-    {
-        if (behaviorController == null)
-        {
-            return;
-        }
-
-        behaviorController.SetState(MapVictimStateToNpcState(victimState));
-    }
-
-    private static NPCState MapVictimStateToNpcState(VictimState victimState)
-    {
-        return victimState switch
-        {
-            VictimState.Idle => NPCState.Idle,
-            VictimState.Following => NPCState.FollowPlayer,
-            VictimState.Dragged => NPCState.AssistedByPlayer,
-            VictimState.Rescued => NPCState.Evacuated,
-            VictimState.Critical => NPCState.Incapacitated,
-            VictimState.Lost => NPCState.Incapacitated,
-            _ => NPCState.Idle
-        };
-    }
 }
