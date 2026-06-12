@@ -102,7 +102,6 @@ public class NPCBehaviorController : MonoBehaviour
             return;
         }
 
-        // Временный отладочный переход помогает быстро проверить лог смены состояния в сцене.
         SetState(startStateOverride);
     }
 
@@ -149,7 +148,7 @@ public class NPCBehaviorController : MonoBehaviour
             return;
         }
 
-        // Когда агент дошел до цели, останавливаем его и возвращаем NPC в состояние ожидания.
+        // Когда агент дошёл до цели, останавливаем его и возвращаем NPC в ожидание.
         StopMovement();
         currentTargetPoint = null;
         currentTargetDesirability = currentPositionDesirability;
@@ -193,7 +192,7 @@ public class NPCBehaviorController : MonoBehaviour
             return;
         }
 
-        // При команде движения сразу переключаем NPC в состояние перемещения к точке.
+        // При команде движения сразу переключаем NPC в нужное состояние перемещения к точке.
         ApplyMovementSpeed();
         navMeshAgent.isStopped = false;
         navMeshAgent.SetDestination(position);
@@ -224,7 +223,7 @@ public class NPCBehaviorController : MonoBehaviour
             return;
         }
 
-        // Динамическая паника всегда ограничивается диапазоном 0..1.
+        // Динамическая паника всегда остаётся в диапазоне 0..1.
         currentPanic = Mathf.Clamp01(currentPanic + Mathf.Max(0f, value));
     }
 
@@ -235,7 +234,7 @@ public class NPCBehaviorController : MonoBehaviour
             return;
         }
 
-        // Динамический ущерб всегда ограничивается диапазоном 0..1.
+        // Динамический ущерб всегда остаётся в диапазоне 0..1.
         currentDamage = Mathf.Clamp01(currentDamage + Mathf.Max(0f, value));
     }
 
@@ -246,7 +245,7 @@ public class NPCBehaviorController : MonoBehaviour
             return;
         }
 
-        // Снижение паники также не должно выводить значение за нижнюю границу.
+        // Снижение паники не должно уходить ниже нуля.
         currentPanic = Mathf.Clamp01(currentPanic - Mathf.Max(0f, value));
     }
 
@@ -257,7 +256,7 @@ public class NPCBehaviorController : MonoBehaviour
             return;
         }
 
-        // После эвакуации NPC фиксируется в финальном состоянии и больше не принимает новые команды.
+        // После эвакуации NPC фиксируется в финальном состоянии и больше не принимает команды.
         isEvacuated = true;
         currentTargetPoint = null;
         currentTargetDesirability = float.NegativeInfinity;
@@ -312,7 +311,6 @@ public class NPCBehaviorController : MonoBehaviour
             return;
         }
 
-        // Отладочный вызов использует позицию выбранного объекта как целевую точку для NavMeshAgent.
         MoveTo(debugMoveTarget.position);
     }
 
@@ -372,7 +370,7 @@ public class NPCBehaviorController : MonoBehaviour
             bestPointDesirability = Mathf.Max(bestPointDesirability, ScorePoint(probePoint));
         }
 
-        // Текущая позиция NPC всегда рассматривается как временный кандидат остаться на месте.
+        // Текущая позиция NPC всегда рассматривается как кандидат остаться на месте.
         currentPositionDesirability = ScoreCurrentPosition();
         bestPointDesirability = Mathf.Max(bestPointDesirability, currentPositionDesirability);
         lastCandidateCount = candidateCount;
@@ -396,12 +394,13 @@ public class NPCBehaviorController : MonoBehaviour
         var dangerAvoidance = parameters != null ? parameters.DangerAvoidance : 1f;
         var trustToRescuer = parameters != null ? parameters.TrustToRescuer : 1f;
         var distanceToPoint = Mathf.Clamp01(point.DistanceToNPC / Mathf.Max(probeSearchRadius, 0.001f));
+        var effectiveDistanceWeight = GetEffectiveDistanceWeight(trustToRescuer);
         var commandBonus = EvaluateCommandPointBonus(point.Position, trustToRescuer);
 
-        // Формула оценивает выгодность точки по близости к выходу, риску, расстоянию и влиянию спасателя/команды.
+        // Формула оценивает выгодность точки по выходу, риску, расстоянию и активной команде.
         return point.ExitProximity * spatialOrientation * orientationWeight
             - point.PointDanger * dangerAvoidance * dangerWeight
-            - distanceToPoint * distanceWeight
+            - distanceToPoint * effectiveDistanceWeight
             + point.RescuerProximity * trustToRescuer * rescuerWeight
             + point.CommandTargetProximity * commandWeight
             + commandBonus;
@@ -446,7 +445,7 @@ public class NPCBehaviorController : MonoBehaviour
             moveSpeedFactor = Mathf.Clamp01(victimNpc.Parameters.MoveSpeed);
         }
 
-        // Фактическая скорость строится от MaxSpeed и коэффициента MoveSpeed из параметров NPC.
+        // Фактическая скорость строится от MaxSpeed и коэффициента MoveSpeed у NPC.
         actualSpeed = Mathf.Clamp(maxSpeed * moveSpeedFactor, minimumSafeMoveSpeed, maxSpeed);
 
         if (navMeshAgent != null)
@@ -500,11 +499,7 @@ public class NPCBehaviorController : MonoBehaviour
 
     private float ScoreCurrentPosition()
     {
-        var trustToRescuer = victimNpc != null && victimNpc.Parameters != null
-            ? victimNpc.Parameters.TrustToRescuer
-            : 1f;
-
-        return stayPointBonus + EvaluateCommandPointBonus(transform.position, trustToRescuer);
+        return stayPointBonus;
     }
 
     private void TryRunDecisionLoop()
@@ -573,7 +568,7 @@ public class NPCBehaviorController : MonoBehaviour
             return;
         }
 
-        // Переключаем цель только когда новая точка заметно лучше текущей, чтобы NPC не дёргался.
+        // Переключаем цель только когда новая точка заметно лучше текущей.
         currentTargetPoint = bestPoint;
         currentTargetDesirability = bestDesirability;
         MoveTo(bestPoint.Position, ResolveMovementStateForCurrentCommand());
@@ -598,10 +593,7 @@ public class NPCBehaviorController : MonoBehaviour
                     * trustToRescuer
                     * commandWeight;
             case NPCCommandType.Stop:
-                // Команда Stop удерживает приоритет области, где NPC получил приказ остановиться.
-                return CalculateTargetProximity(pointPosition, activeCommandTargetPosition)
-                    * stopCommandBonus
-                    * trustToRescuer;
+                return 0f;
             case NPCCommandType.GoThere:
                 if (!activeCommandHasTargetPosition)
                 {
@@ -624,6 +616,17 @@ public class NPCBehaviorController : MonoBehaviour
         var distance = Vector3.Distance(pointPosition, targetPosition);
         var normalizedDistance = Mathf.Clamp01(distance / Mathf.Max(probeSearchRadius, 0.001f));
         return 1f - normalizedDistance;
+    }
+
+    private float GetEffectiveDistanceWeight(float trustToRescuer)
+    {
+        if (!hasActiveCommandOverride || activeCommandType != NPCCommandType.Stop)
+        {
+            return distanceWeight;
+        }
+
+        // При команде Stop усиливаем влияние штрафа за расстояние, не меняя само базовое DistanceWeight.
+        return distanceWeight + stopCommandBonus * trustToRescuer;
     }
 
     private NPCState ResolveMovementStateForCurrentCommand()
