@@ -65,10 +65,10 @@
     <Compile Include="Assets\VRTemplateAssets\Scripts\VideoPlayerRenderTexture.cs" />
     <Compile Include="Assets\VRTemplateAssets\Scripts\Rotator.cs" />
     <Compile Include="Assets\Scripts\NPC\VictimHandHoldController.cs" />
-    <Compile Include="Assets\Scripts\NPC\NPCBehaviorController.cs" />
-    <Compile Include="Assets\Scripts\NPC\NPCState.cs" />
     <Compile Include="Assets\VRTemplateAssets\Scripts\XRKnob.cs" />
     <Compile Include="Assets\VRTemplateAssets\Scripts\BooleanToggleVisualsController.cs" />
+    <Compile Include="Assets\Scripts\NPC\NPCBehaviorController.cs" />
+    <Compile Include="Assets\Scripts\NPC\NPCParameterSet.cs" />
     <Compile Include="Assets\VRTemplateAssets\Scripts\RayAttachModifier.cs" />
     <Compile Include="Assets\Scripts\Scenario\ScenarioRunLog.cs" />
     <Compile Include="Assets\Scripts\NPC\VictimNPC.cs" />
@@ -80,6 +80,7 @@
     <Compile Include="Assets\Scripts\VR\StickLocomotionOnlyBootstrap.cs" />
     <Compile Include="Assets\Scripts\Scenario\EvacuationZone.cs" />
     <Compile Include="Assets\Scripts\Scenario\ScenarioLogger.cs" />
+    <Compile Include="Assets\Scripts\NPC\NPCState.cs" />
     <Compile Include="Assets\VRTemplateAssets\Scripts\DestroyObject.cs" />
     <Compile Include="Assets\VRTemplateAssets\Scripts\VideoTimeScrubControl.cs" />
     <Compile Include="Assets\Scripts\VR\NearOnlyGrabInteractable.cs" />

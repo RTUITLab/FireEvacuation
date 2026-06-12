@@ -6,7 +6,6 @@ using UnityEngine.XR.Interaction.Toolkit.Interactables;
 [DisallowMultipleComponent]
 public class VictimNPC : MonoBehaviour
 {
-    private const float DefaultFearfulness = 0.5f;
     private const float LowMovementSmokeDamageMultiplier = 0.5f;
     private const float LowMovementSmokePanicMultiplier = 0.7f;
 
@@ -27,7 +26,7 @@ public class VictimNPC : MonoBehaviour
     [SerializeField] [Range(0f, 1f)] private float currentPanic;
     [SerializeField] private HazardZone currentHazardZone;
     [SerializeField] private bool isInLowMovement;
-    [SerializeField] [Range(0f, 1f)] private float weight = 0.5f;
+    [SerializeField] private NPCParameterSet parameters = new NPCParameterSet();
     [SerializeField] [Range(0f, 1f)] private float criticalDamageThreshold = 0.75f;
     [SerializeField] private VictimState initialState = VictimState.Idle;
     [SerializeField] private Color rescuedColor = new Color(0.24f, 0.85f, 0.32f, 1f);
@@ -46,7 +45,8 @@ public class VictimNPC : MonoBehaviour
     public float CurrentPanic => currentPanic;
     public HazardZone CurrentHazardZone => currentHazardZone;
     public bool IsInLowMovement => isInLowMovement;
-    public float Weight => weight;
+    public NPCParameterSet Parameters => parameters;
+    public float Weight => parameters.Weight;
     public bool IsCritical => isCritical;
     public bool IsLost => isLost;
     public VictimState CurrentState => currentState;
@@ -58,7 +58,8 @@ public class VictimNPC : MonoBehaviour
         condition = Mathf.Clamp01(condition);
         currentDamage = Mathf.Clamp01(currentDamage);
         currentPanic = Mathf.Clamp01(currentPanic);
-        weight = Mathf.Clamp01(weight);
+        EnsureParameters();
+        parameters.ClampAll();
         criticalDamageThreshold = Mathf.Clamp01(criticalDamageThreshold);
         cachedRenderers = GetComponentsInChildren<Renderer>(true);
         isLost = !isRescued && currentDamage >= 1f;
@@ -89,7 +90,8 @@ public class VictimNPC : MonoBehaviour
         condition = Mathf.Clamp01(condition);
         currentDamage = Mathf.Clamp01(currentDamage);
         currentPanic = Mathf.Clamp01(currentPanic);
-        weight = Mathf.Clamp01(weight);
+        EnsureParameters();
+        parameters.ClampAll();
         criticalDamageThreshold = Mathf.Clamp01(criticalDamageThreshold);
         EnsureNpcId();
         EnsureUniqueNpcId();
@@ -329,8 +331,7 @@ public class VictimNPC : MonoBehaviour
 
     private float GetFearfulness()
     {
-        // TODO: replace with VictimParameters.Fearfulness when NPC parameter data is introduced.
-        return DefaultFearfulness;
+        return parameters.Fearfulness;
     }
 
     private VictimState ResolveStateAfterStatusChange(VictimState fallbackState)
@@ -394,6 +395,14 @@ public class VictimNPC : MonoBehaviour
             {
                 material.SetColor("_Color", color);
             }
+        }
+    }
+
+    private void EnsureParameters()
+    {
+        if (parameters == null)
+        {
+            parameters = new NPCParameterSet();
         }
     }
 
