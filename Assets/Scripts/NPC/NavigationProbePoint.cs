@@ -63,6 +63,11 @@ public class NavigationProbePoint : MonoBehaviour
         visibleForNPC = false;
     }
 
+    public void SetExitProximity(float value)
+    {
+        exitProximity = Mathf.Clamp01(value);
+    }
+
     private void RefreshPosition()
     {
         position = transform.position;
