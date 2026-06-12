@@ -64,6 +64,11 @@ public class FireSource : MonoBehaviour
         return fireIntensity;
     }
 
+    public float GetFireRadius()
+    {
+        return fireRadius;
+    }
+
     public float GetFireDamageRate()
     {
         return IsBurning() ? fireIntensity * fireDamageRate : 0f;

@@ -17,6 +17,11 @@ public class NavigationProbeGenerator : MonoBehaviour
     [SerializeField] private NavigationProbePoint probePrefab;
     [SerializeField] private Transform generatedRoot;
 
+    [Header("Danger Update")]
+    [SerializeField] [Range(0f, 1f)] private float smokeDangerWeight = 1f;
+    [SerializeField] [Min(1f)] private float fireBlockRadiusMultiplier = 1f;
+    [SerializeField] [Min(1f)] private float fireDangerRadiusMultiplier = 2f;
+
     public float ProbeSpacing => probeSpacing;
 
     private void Reset()
@@ -79,8 +84,34 @@ public class NavigationProbeGenerator : MonoBehaviour
             }
         }
 
+        RecalculateProbeDanger();
         ExitProximityCalculator.RecalculateSceneExitProximity();
         Debug.Log($"NavigationProbeGenerator '{name}' generated {createdCount} probes.", this);
+    }
+
+    [ContextMenu("Recalculate Probe Danger")]
+    public void RecalculateProbeDanger()
+    {
+        var probePoints = generatedRoot != null
+            ? generatedRoot.GetComponentsInChildren<NavigationProbePoint>(true)
+            : FindObjectsByType<NavigationProbePoint>(FindObjectsInactive.Include);
+        var smokeZones = FindObjectsByType<SmokeZone>(FindObjectsInactive.Include);
+        var fireSources = FindObjectsByType<FireSource>(FindObjectsInactive.Include);
+
+        for (var probeIndex = 0; probeIndex < probePoints.Length; probeIndex++)
+        {
+            var probePoint = probePoints[probeIndex];
+            if (probePoint == null)
+            {
+                continue;
+            }
+
+            var pointPosition = probePoint.transform.position;
+            var pointDanger = CalculateSmokeDanger(pointPosition, smokeZones) + CalculateFireDanger(pointPosition, fireSources, out var isBlocked);
+
+            // Опасность суммируется из дыма и огня, а затем ограничивается диапазоном 0..1.
+            probePoint.SetDangerState(pointDanger, isBlocked);
+        }
     }
 
     private Bounds ResolveGenerationBounds()
@@ -158,5 +189,91 @@ public class NavigationProbeGenerator : MonoBehaviour
     private static string BuildPositionKey(Vector3 position)
     {
         return $"{position.x:F2}_{position.y:F2}_{position.z:F2}";
+    }
+
+    private float CalculateSmokeDanger(Vector3 pointPosition, SmokeZone[] smokeZones)
+    {
+        var danger = 0f;
+
+        for (var smokeIndex = 0; smokeIndex < smokeZones.Length; smokeIndex++)
+        {
+            var smokeZone = smokeZones[smokeIndex];
+            if (smokeZone == null)
+            {
+                continue;
+            }
+
+            if (!TryGetZoneCollider(smokeZone.gameObject, out var zoneCollider))
+            {
+                continue;
+            }
+
+            if (!IsPointInsideCollider(zoneCollider, pointPosition))
+            {
+                continue;
+            }
+
+            danger += smokeZone.GetSmokeLevel() * smokeDangerWeight;
+        }
+
+        return Mathf.Clamp01(danger);
+    }
+
+    private float CalculateFireDanger(Vector3 pointPosition, FireSource[] fireSources, out bool isBlocked)
+    {
+        var danger = 0f;
+        isBlocked = false;
+
+        for (var fireIndex = 0; fireIndex < fireSources.Length; fireIndex++)
+        {
+            var fireSource = fireSources[fireIndex];
+            if (fireSource == null || !fireSource.IsBurning())
+            {
+                continue;
+            }
+
+            var distanceToFire = Vector3.Distance(pointPosition, fireSource.transform.position);
+            var blockRadius = fireSource.GetFireRadius() * fireBlockRadiusMultiplier;
+            var dangerRadius = fireSource.GetFireRadius() * fireDangerRadiusMultiplier;
+
+            if (distanceToFire <= blockRadius)
+            {
+                isBlocked = true;
+            }
+
+            if (distanceToFire > dangerRadius || Mathf.Approximately(dangerRadius, blockRadius))
+            {
+                continue;
+            }
+
+            // Внешний радиус огня добавляет опасность, но не обязан блокировать точку.
+            var normalizedDanger = 1f - Mathf.InverseLerp(blockRadius, dangerRadius, distanceToFire);
+            danger += normalizedDanger * fireSource.GetPathDangerContribution();
+        }
+
+        return Mathf.Clamp01(danger);
+    }
+
+    private static bool TryGetZoneCollider(GameObject zoneObject, out Collider zoneCollider)
+    {
+        zoneCollider = null;
+        if (zoneObject == null)
+        {
+            return false;
+        }
+
+        zoneCollider = zoneObject.GetComponent<Collider>();
+        return zoneCollider != null;
+    }
+
+    private static bool IsPointInsideCollider(Collider zoneCollider, Vector3 pointPosition)
+    {
+        if (zoneCollider == null)
+        {
+            return false;
+        }
+
+        var closestPoint = zoneCollider.ClosestPoint(pointPosition);
+        return (closestPoint - pointPosition).sqrMagnitude <= 0.0001f;
     }
 }

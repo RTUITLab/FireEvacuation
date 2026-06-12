@@ -68,6 +68,12 @@ public class NavigationProbePoint : MonoBehaviour
         exitProximity = Mathf.Clamp01(value);
     }
 
+    public void SetDangerState(float dangerValue, bool blocked)
+    {
+        pointDanger = Mathf.Clamp01(dangerValue);
+        isBlocked = blocked;
+    }
+
     private void RefreshPosition()
     {
         position = transform.position;
