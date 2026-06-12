@@ -27,6 +27,8 @@ public class VictimNPC : MonoBehaviour
     [SerializeField] [Range(0f, 1f)] private float criticalDamageThreshold = 0.75f;
     [SerializeField] [Range(0f, 1f)] private float lowMovementSmokeDamageMultiplier = 0.5f;
     [SerializeField] [Range(0f, 1f)] private float lowMovementSmokePanicMultiplier = 0.7f;
+    [SerializeField] private float currentFireThreatLevel;
+    [SerializeField] private FireSource currentNearestFireSource;
     [SerializeField] private VictimState initialState = VictimState.Idle;
     [SerializeField] private Color rescuedColor = new Color(0.24f, 0.85f, 0.32f, 1f);
     [SerializeField] private Color criticalColor = new Color(0.82f, 0.16f, 0.16f, 1f);
@@ -84,6 +86,18 @@ public class VictimNPC : MonoBehaviour
     private void OnEnable()
     {
         RegisterWithScenarioManager();
+    }
+
+    private void FixedUpdate()
+    {
+        if (isRescued)
+        {
+            currentFireThreatLevel = 0f;
+            currentNearestFireSource = null;
+            return;
+        }
+
+        ApplyNearestFireThreat(Time.fixedDeltaTime);
     }
 
     private void OnValidate()
@@ -155,12 +169,19 @@ public class VictimNPC : MonoBehaviour
 
         currentHazardZone = zone;
 
+        if (zone.GetHazardType() == HazardZone.HazardType.Fire)
+        {
+            return;
+        }
+
         var damageDelta = zone.GetDamageRate() * deltaTime;
         var panicDelta = zone.GetPanicRate() * GetFearfulness() * deltaTime;
 
         if (zone.GetHazardType() == HazardZone.HazardType.Smoke && zone.TryGetComponent<SmokeZone>(out var smokeZone))
         {
             var smokeLevel = smokeZone.GetSmokeLevel();
+
+            // Для дыма используем текущий SmokeLevel зоны и её коэффициенты урона и паники.
             damageDelta = smokeLevel * smokeZone.GetSmokeDamageRate() * deltaTime;
             panicDelta = smokeLevel * GetFearfulness() * smokeZone.GetSmokePanicGain() * deltaTime;
 
@@ -172,27 +193,7 @@ public class VictimNPC : MonoBehaviour
             }
         }
 
-        currentDamage = Mathf.Clamp01(currentDamage + damageDelta);
-        currentPanic = Mathf.Clamp01(currentPanic + panicDelta);
-        condition = Mathf.Clamp01(1f - currentDamage);
-
-        if (TryGetComponent<NPCBehaviorController>(out var behaviorController))
-        {
-            // Повреждение и паника от дыма должны обновлять и новое состояние NPC-контроллера.
-            behaviorController.AddDamage(damageDelta);
-            behaviorController.AddPanic(panicDelta);
-        }
-
-        if (!isLost && currentDamage >= 1f)
-        {
-            MarkLost();
-            return;
-        }
-
-        if (!isCritical && currentDamage >= criticalDamageThreshold)
-        {
-            EnterCriticalState();
-        }
+        ApplyThreatDelta(damageDelta, panicDelta);
     }
 
     public bool MarkLost()
@@ -353,6 +354,94 @@ public class VictimNPC : MonoBehaviour
         }
     }
 
+    private void ApplyNearestFireThreat(float deltaTime)
+    {
+        if (deltaTime <= 0f)
+        {
+            return;
+        }
+
+        var fireSources = FindObjectsByType<FireSource>(FindObjectsInactive.Include);
+        FireSource nearestActiveFireSource = null;
+        var nearestDistance = float.MaxValue;
+        var bestThreatLevel = 0f;
+
+        for (var index = 0; index < fireSources.Length; index++)
+        {
+            var fireSource = fireSources[index];
+            if (fireSource == null || !fireSource.IsBurning())
+            {
+                continue;
+            }
+
+            var distanceToFire = Vector3.Distance(transform.position, fireSource.transform.position);
+            if (distanceToFire >= nearestDistance)
+            {
+                continue;
+            }
+
+            nearestDistance = distanceToFire;
+            nearestActiveFireSource = fireSource;
+            bestThreatLevel = CalculateFireThreatLevel(fireSource, distanceToFire);
+        }
+
+        currentNearestFireSource = nearestActiveFireSource;
+        currentFireThreatLevel = bestThreatLevel;
+
+        if (currentNearestFireSource == null || currentFireThreatLevel <= 0f)
+        {
+            return;
+        }
+
+        // Угроза огня зависит от интенсивности очага и близости NPC к нему.
+        var damageDelta = currentFireThreatLevel * currentNearestFireSource.GetBaseFireDamageRate() * deltaTime;
+        var panicDelta = currentFireThreatLevel * GetFearfulness() * currentNearestFireSource.GetBaseFirePanicGain() * deltaTime;
+
+        ApplyThreatDelta(damageDelta, panicDelta);
+    }
+
+    private float CalculateFireThreatLevel(FireSource fireSource, float distanceToFire)
+    {
+        if (fireSource == null || !fireSource.IsBurning())
+        {
+            return 0f;
+        }
+
+        var fireThreatByDistance = 1f - Mathf.Clamp01(distanceToFire / Mathf.Max(fireSource.GetFireRadius(), 0.001f));
+        return fireSource.GetFireIntensity() * fireThreatByDistance;
+    }
+
+    private void ApplyThreatDelta(float damageDelta, float panicDelta)
+    {
+        if (damageDelta <= 0f && panicDelta <= 0f)
+        {
+            return;
+        }
+
+        // Любая угроза сводится к общему накоплению урона и паники у NPC.
+        currentDamage = Mathf.Clamp01(currentDamage + Mathf.Max(0f, damageDelta));
+        currentPanic = Mathf.Clamp01(currentPanic + Mathf.Max(0f, panicDelta));
+        condition = Mathf.Clamp01(1f - currentDamage);
+
+        if (TryGetComponent<NPCBehaviorController>(out var behaviorController))
+        {
+            behaviorController.AddDamage(damageDelta);
+            behaviorController.AddPanic(panicDelta);
+        }
+
+        if (!isLost && currentDamage >= 1f)
+        {
+            MarkLost();
+            return;
+        }
+
+        if (!isCritical && currentDamage >= criticalDamageThreshold)
+        {
+            // При критическом накоплении урона NPC переходит в недееспособное состояние.
+            EnterCriticalState();
+        }
+    }
+
     private float GetFearfulness()
     {
         return parameters.Fearfulness;
@@ -429,5 +518,4 @@ public class VictimNPC : MonoBehaviour
             parameters = new NPCParameterSet();
         }
     }
-
 }

@@ -74,9 +74,19 @@ public class FireSource : MonoBehaviour
         return IsBurning() ? fireIntensity * fireDamageRate : 0f;
     }
 
+    public float GetBaseFireDamageRate()
+    {
+        return fireDamageRate;
+    }
+
     public float GetFirePanicGain()
     {
         return IsBurning() ? fireIntensity * firePanicGain : 0f;
+    }
+
+    public float GetBaseFirePanicGain()
+    {
+        return firePanicGain;
     }
 
     public float GetPathDangerContribution()
