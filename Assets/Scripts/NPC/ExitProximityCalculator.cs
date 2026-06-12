@@ -4,8 +4,8 @@ public static class ExitProximityCalculator
 {
     public static void RecalculateSceneExitProximity()
     {
-        var probePoints = Object.FindObjectsByType<NavigationProbePoint>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        var exitPoints = Object.FindObjectsByType<ExitPoint>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        var probePoints = Object.FindObjectsByType<NavigationProbePoint>(FindObjectsInactive.Include);
+        var exitPoints = Object.FindObjectsByType<ExitPoint>(FindObjectsInactive.Include);
         RecalculateExitProximity(probePoints, exitPoints);
     }
 
