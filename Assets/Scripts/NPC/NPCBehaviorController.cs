@@ -212,18 +212,14 @@ public class NPCBehaviorController : MonoBehaviour
     private void ApplyMovementSpeed()
     {
         var moveSpeedFactor = 1f;
-        var mobilityLimitFactor = 1f;
 
         if (victimNpc != null && victimNpc.Parameters != null)
         {
             moveSpeedFactor = Mathf.Clamp01(victimNpc.Parameters.MoveSpeed);
-            mobilityLimitFactor = Mathf.Clamp01(victimNpc.Parameters.MobilityLimit);
         }
 
         // Базовая скорость берётся из MoveSpeed, а MobilityLimit ограничивает её сверху для малоподвижных NPC.
-        var desiredSpeed = maxSpeed * moveSpeedFactor;
-        var mobilityCappedSpeed = Mathf.Lerp(minimumSafeMoveSpeed, maxSpeed, mobilityLimitFactor);
-        actualSpeed = Mathf.Clamp(Mathf.Min(desiredSpeed, mobilityCappedSpeed), minimumSafeMoveSpeed, maxSpeed);
+        actualSpeed = Mathf.Clamp(maxSpeed * moveSpeedFactor, minimumSafeMoveSpeed, maxSpeed);
 
         if (navMeshAgent != null)
         {
