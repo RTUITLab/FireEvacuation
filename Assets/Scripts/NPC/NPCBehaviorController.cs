@@ -58,6 +58,33 @@ public class NPCBehaviorController : MonoBehaviour
         ClampDynamicState();
     }
 
+    private void Update()
+    {
+        if (navMeshAgent == null || currentState != NPCState.MoveToPoint)
+        {
+            return;
+        }
+
+        if (navMeshAgent.pathPending)
+        {
+            return;
+        }
+
+        if (navMeshAgent.remainingDistance > navMeshAgent.stoppingDistance)
+        {
+            return;
+        }
+
+        if (navMeshAgent.hasPath && navMeshAgent.velocity.sqrMagnitude > 0.0001f)
+        {
+            return;
+        }
+
+        // Когда агент дошёл до цели, останавливаем его и возвращаем NPC в состояние ожидания.
+        StopMovement();
+        SetState(NPCState.Idle);
+    }
+
     public void SetState(NPCState newState)
     {
         if (currentState == newState)
