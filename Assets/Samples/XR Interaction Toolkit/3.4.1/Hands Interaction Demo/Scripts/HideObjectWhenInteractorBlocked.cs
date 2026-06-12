@@ -1,4 +1,4 @@
-using UnityEngine.XR.Interaction.Toolkit.Interactors;
+﻿using UnityEngine.XR.Interaction.Toolkit.Interactors;
 using UnityEngine.XR.Interaction.Toolkit.Interactors.Visuals;
 
 namespace UnityEngine.XR.Interaction.Toolkit.Samples.Hands

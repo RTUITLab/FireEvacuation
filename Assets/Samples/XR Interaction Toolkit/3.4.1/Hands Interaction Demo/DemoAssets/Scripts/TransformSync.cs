@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine.XR.Interaction.Toolkit.Utilities.Tweenables.Primitives;
 
 namespace UnityEngine.XR.Interaction.Toolkit.Samples.Hands

@@ -1,4 +1,4 @@
-public enum NPCState
+﻿public enum NPCState
 {
     Idle = 0,
     MoveToPoint = 1,

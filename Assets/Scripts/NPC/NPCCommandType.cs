@@ -1,4 +1,4 @@
-public enum NPCCommandType
+﻿public enum NPCCommandType
 {
     FollowPlayer = 0,
     Stop = 1,

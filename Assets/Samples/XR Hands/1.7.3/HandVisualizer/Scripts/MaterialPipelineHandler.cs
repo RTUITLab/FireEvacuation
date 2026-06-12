@@ -1,4 +1,4 @@
-using UnityEngine.Rendering;
+﻿using UnityEngine.Rendering;
 using System.Collections.Generic;
 #if UNITY_EDITOR
 using UnityEditor;

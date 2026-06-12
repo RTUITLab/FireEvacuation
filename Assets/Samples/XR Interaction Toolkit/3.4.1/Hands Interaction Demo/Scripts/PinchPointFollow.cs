@@ -1,4 +1,4 @@
-#if XR_HANDS_1_2_OR_NEWER
+﻿#if XR_HANDS_1_2_OR_NEWER
 using Unity.XR.CoreUtils.Bindings;
 using UnityEngine.XR.Hands;
 using UnityEngine.XR.Interaction.Toolkit.Utilities.Tweenables.Primitives;

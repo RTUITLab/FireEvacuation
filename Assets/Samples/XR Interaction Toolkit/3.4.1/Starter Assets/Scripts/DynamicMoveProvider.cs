@@ -1,4 +1,4 @@
-using Unity.XR.CoreUtils;
+﻿using Unity.XR.CoreUtils;
 using UnityEngine.Assertions;
 using UnityEngine.XR.Interaction.Toolkit.Locomotion.Movement;
 

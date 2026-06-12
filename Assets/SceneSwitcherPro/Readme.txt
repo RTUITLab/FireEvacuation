@@ -1,4 +1,4 @@
-Scene Switcher Pro
+﻿Scene Switcher Pro
 
 Scene Switcher Pro is a Unity Editor extension that enables easy scene switching directly from the toolbar, right next to the Play button. It’s designed to save time and streamline your workflow by giving you quick access to scenes in your project.
 

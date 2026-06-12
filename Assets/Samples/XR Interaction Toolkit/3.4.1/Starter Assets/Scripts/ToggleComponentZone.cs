@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace UnityEngine.XR.Interaction.Toolkit.Samples.StarterAssets
 {

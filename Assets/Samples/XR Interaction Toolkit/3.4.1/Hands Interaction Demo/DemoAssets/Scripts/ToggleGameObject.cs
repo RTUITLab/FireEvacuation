@@ -1,4 +1,4 @@
-namespace UnityEngine.XR.Interaction.Toolkit.Samples.Hands
+﻿namespace UnityEngine.XR.Interaction.Toolkit.Samples.Hands
 {
     /// <summary>
     /// Toggles the active state of a GameObject.

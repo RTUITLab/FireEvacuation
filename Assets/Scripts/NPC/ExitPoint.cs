@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 [DisallowMultipleComponent]
 public class ExitPoint : MonoBehaviour

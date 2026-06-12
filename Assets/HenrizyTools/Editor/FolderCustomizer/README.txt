@@ -1,4 +1,4 @@
-﻿Folder Customizer for Unity
+﻿﻿Folder Customizer for Unity
 
 Folder Customizer is a lightweight Unity editor tool that allows you to visually organize your project by assigning custom background colors and text styles to individual folders in the Project window.
 

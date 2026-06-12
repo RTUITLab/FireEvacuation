@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine.XR.Hands.Processing;
 
 namespace UnityEngine.XR.Hands.Samples.VisualizerSample

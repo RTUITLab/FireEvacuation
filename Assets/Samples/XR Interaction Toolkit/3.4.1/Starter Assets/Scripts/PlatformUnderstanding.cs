@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 #if OPENXR_1_6_OR_NEWER
 using UnityEngine.XR.OpenXR;

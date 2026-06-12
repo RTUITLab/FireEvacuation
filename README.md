@@ -1,4 +1,4 @@
-# FireEvacuation
+﻿# FireEvacuation
 
 Минимальная структура Unity-проекта для MVP VR-симуляции эвакуации пострадавших.
 

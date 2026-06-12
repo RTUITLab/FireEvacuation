@@ -1,0 +1,24 @@
+root = true
+
+[*]
+charset = utf-8-bom
+end_of_line = crlf
+insert_final_newline = true
+
+[*.cs]
+charset = utf-8-bom
+
+[*.md]
+charset = utf-8-bom
+
+[*.json]
+charset = utf-8-bom
+
+[*.yml]
+charset = utf-8-bom
+
+[*.yaml]
+charset = utf-8-bom
+
+[*.txt]
+charset = utf-8-bom
