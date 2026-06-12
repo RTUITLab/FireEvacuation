@@ -28,6 +28,17 @@ public class NPCBehaviorController : MonoBehaviour
     [SerializeField] private int lastCandidateCount;
     [SerializeField] private int lastVisibleCandidateCount;
 
+    [Header("Point Scoring")]
+    [SerializeField] [Range(0f, 1f)] private float orientationWeight = 1f;
+    [SerializeField] [Range(0f, 1f)] private float dangerWeight = 1f;
+    [SerializeField] [Range(0f, 1f)] private float distanceWeight = 0.5f;
+    [SerializeField] [Range(0f, 1f)] private float rescuerWeight = 0.5f;
+    [SerializeField] [Range(0f, 1f)] private float commandWeight = 0.5f;
+    [SerializeField] [Range(0f, 1f)] private float stayPointBonus = 0.25f;
+    [SerializeField] [Range(0f, 1f)] private float stopCommandBonus = 0.25f;
+    [SerializeField] private float bestPointDesirability = float.NegativeInfinity;
+    [SerializeField] private float currentPositionDesirability = float.NegativeInfinity;
+
     [Header("Debug")]
     [SerializeField] private bool applyStartStateOverride;
     [SerializeField] private NPCState startStateOverride = NPCState.MoveToPoint;
@@ -46,6 +57,8 @@ public class NPCBehaviorController : MonoBehaviour
     public float ActualSpeed => actualSpeed;
     public float ProbeSearchRadius => probeSearchRadius;
     public float ViewRadius => viewRadius;
+    public float BestPointDesirability => bestPointDesirability;
+    public float CurrentPositionDesirability => currentPositionDesirability;
 
     private NavMeshAgent navMeshAgent;
     private VictimNPC victimNpc;
@@ -269,6 +282,7 @@ public class NPCBehaviorController : MonoBehaviour
         var candidateCount = 1;
         var visibleCandidateCount = 1;
         var origin = GetViewOrigin();
+        bestPointDesirability = float.NegativeInfinity;
 
         for (var index = 0; index < probePoints.Length; index++)
         {
@@ -293,11 +307,41 @@ public class NPCBehaviorController : MonoBehaviour
             {
                 visibleCandidateCount++;
             }
+
+            bestPointDesirability = Mathf.Max(bestPointDesirability, ScorePoint(probePoint));
         }
 
         // Текущая позиция NPC всегда рассматривается как временный кандидат остаться на месте.
+        currentPositionDesirability = ScoreCurrentPosition();
+        bestPointDesirability = Mathf.Max(bestPointDesirability, currentPositionDesirability);
         lastCandidateCount = candidateCount;
         lastVisibleCandidateCount = visibleCandidateCount;
+    }
+
+    public float ScorePoint(NavigationProbePoint point)
+    {
+        if (point == null)
+        {
+            return float.NegativeInfinity;
+        }
+
+        if (point.IsBlocked)
+        {
+            return float.NegativeInfinity;
+        }
+
+        var parameters = victimNpc != null ? victimNpc.Parameters : null;
+        var spatialOrientation = parameters != null ? parameters.SpatialOrientation : 1f;
+        var dangerAvoidance = parameters != null ? parameters.DangerAvoidance : 1f;
+        var trustToRescuer = parameters != null ? parameters.TrustToRescuer : 1f;
+        var distanceToPoint = Mathf.Clamp01(point.DistanceToNPC / Mathf.Max(probeSearchRadius, 0.001f));
+
+        // Формула оценивает выгодность точки по близости к выходу, риску, расстоянию и влиянию спасателя/команды.
+        return point.ExitProximity * spatialOrientation * orientationWeight
+            - point.PointDanger * dangerAvoidance * dangerWeight
+            - distanceToPoint * distanceWeight
+            + point.RescuerProximity * trustToRescuer * rescuerWeight
+            + point.CommandTargetProximity * commandWeight;
     }
 
     private void ClampDynamicState()
@@ -312,6 +356,13 @@ public class NPCBehaviorController : MonoBehaviour
         minimumSafeMoveSpeed = Mathf.Clamp(minimumSafeMoveSpeed, 0.05f, maxSpeed);
         probeSearchRadius = Mathf.Max(0.5f, probeSearchRadius);
         viewRadius = Mathf.Clamp(viewRadius, 0.5f, probeSearchRadius);
+        orientationWeight = Mathf.Clamp01(orientationWeight);
+        dangerWeight = Mathf.Clamp01(dangerWeight);
+        distanceWeight = Mathf.Clamp01(distanceWeight);
+        rescuerWeight = Mathf.Clamp01(rescuerWeight);
+        commandWeight = Mathf.Clamp01(commandWeight);
+        stayPointBonus = Mathf.Clamp01(stayPointBonus);
+        stopCommandBonus = Mathf.Clamp01(stopCommandBonus);
     }
 
     private void ApplyMovementSpeed()
@@ -373,5 +424,16 @@ public class NPCBehaviorController : MonoBehaviour
             distance,
             visibilityObstacleMask,
             QueryTriggerInteraction.Ignore);
+    }
+
+    private float ScoreCurrentPosition()
+    {
+        var currentPositionBonus = stayPointBonus;
+        if (currentState == NPCState.Idle)
+        {
+            currentPositionBonus += stopCommandBonus;
+        }
+
+        return currentPositionBonus;
     }
 }
